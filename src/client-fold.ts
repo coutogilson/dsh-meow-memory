@@ -24,6 +24,10 @@ import type {
   ChatNode,
   ToolChatData,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import { t } from './i18n/index.js'
+
+/** 测试接点：界面语言（生产代码读 DSH locale 服务，勿在业务逻辑里调用这两个）。 */
+export { setUiLocaleForTest, getUiLocale } from './i18n/index.js'
 
 /** 反思轮识别标记（与 host 端 reflect.ts / dream.ts 保持一致）。 */
 export const REFLECT_MARKER = '[meow-memory-reflect]'
@@ -195,14 +199,15 @@ export function memoryTurnNumbers(snapshot: ConversationSnapshot): ReadonlySet<n
   return out
 }
 
-/** 横条文案（产品 copy，中文）。 */
-export function foldLabel(group: FoldGroup, expanded: boolean): string {  const arrow = expanded ? '▾' : '▸'
-  const title = group.variant === 'dream' ? '记忆梦境任务' : '记忆反思'
-  if (group.status === 'running') return `${arrow} ${title}进行中…`
-  if (group.status === 'interrupted') return `${arrow} ${title}已中断`
-  if (group.rememberCount > 0) return `${arrow} ${title} · 新增记忆 ${group.rememberCount} 条`
-  if (group.updateCount > 0) return `${arrow} ${title} · 已更新 ${group.updateCount} 条`
-  return `${arrow} ${title} · 无需记忆`
+/** 横条文案（产品 copy，经 i18n 层：跟随 DSH 语言设置 zh/en/pt-br）。 */
+export function foldLabel(group: FoldGroup, expanded: boolean): string {
+  const arrow = expanded ? '▾' : '▸'
+  const title = t(group.variant === 'dream' ? 'fold.title.dream' : 'fold.title.reflect')
+  if (group.status === 'running') return `${arrow} ${t('fold.status.running', { title })}`
+  if (group.status === 'interrupted') return `${arrow} ${t('fold.status.interrupted', { title })}`
+  if (group.rememberCount > 0) return `${arrow} ${t('fold.status.remembered', { title, n: group.rememberCount })}`
+  if (group.updateCount > 0) return `${arrow} ${t('fold.status.updated', { title, n: group.updateCount })}`
+  return `${arrow} ${t('fold.status.nothing', { title })}`
 }
 
 /** 渲染一个 tool 调用的详情文本：名称 + 格式化参数（JSON pretty）。 */
@@ -310,8 +315,8 @@ export function computeInjectionGroups(snapshot: ConversationSnapshot): Injectio
 }
 
 /** 注入用户消息的时间标签。与 dsh 本体 formatMessageClock 同规则（同天 HH:mm、
- *  今年「M月D日 HH:mm」、跨年「Y年M月D日 HH:mm」，中文产品文案），供插件自绘的
- *  注入消息操作行使用——本体按钮的复制文本闭包含注入前缀，无法直接复用。
+ *  今年「M/D HH:mm」、跨年「Y/M/D HH:mm」，文案经 i18n 层，跟随 DSH 语言设置），
+ *  供插件自绘的注入消息操作行使用——本体按钮的复制文本闭包含注入前缀，无法直接复用。
  * @param time - 消息事件时间（Unix epoch ms）。
  * @param now - 参考时刻（默认当前；测试可注入）。
  * @returns 时钟字符串（24 小时制补零）。
@@ -326,7 +331,7 @@ export function formatInjectionClock(time: number, now: number = Date.now()): st
     && d.getDate() === n.getDate()
   if (sameDay) return clock
   const md = d.getFullYear() === n.getFullYear()
-    ? `${d.getMonth() + 1}月${d.getDate()}日`
-    : `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
+    ? t('datetime.ymd', { m: d.getMonth() + 1, d: d.getDate() })
+    : t('datetime.ymdFull', { y: d.getFullYear(), m: d.getMonth() + 1, d: d.getDate() })
   return `${md} ${clock}`
 }

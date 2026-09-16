@@ -32,6 +32,7 @@ import { applyDelegateNotices, computeDelegateNotices, startDelegateStateSync, t
 import { startDreamIconManager } from './client-dream-icon.ts'
 import { startDreamSkipManager } from './client-dream-skip.ts'
 import { applySettingsPage } from './settings-page.ts'
+import { installI18n, onUiLocaleChange, t } from './i18n/index.js'
 
 /** 折叠行标记（CSS 规则隐藏）。 */
 const FOLDED_ATTR = 'data-meow-memory-folded'
@@ -188,6 +189,9 @@ function ensureAnchor(
   }
   const label = foldLabel(group, expanded)
   if (bar.textContent !== label) bar.textContent = label
+  // 语言切换后重放：tooltip 也跟着文案走（纯 DOM 属性，同样不随 React 更新）。
+  const hint = t(expanded ? 'inject.collapse' : 'inject.expand')
+  if (bar.title !== hint) bar.title = hint
   let body = anchor.querySelector<HTMLElement>(`:scope > [${BODY_ATTR}]`)
   if (body === null) {
     body = document.createElement('div')
@@ -261,7 +265,7 @@ function enhanceClone(clone: HTMLElement, node: ChatNode | undefined): void {
     const argsRaw = 'name' in root ? root.argsRaw : (root.call?.argsRaw ?? '')
     const detail = toolCallDetail({ name, argsRaw })
     const resultText = 'content' in root ? blocksToText(root.content) : ''
-    attachDisclosure(rowEl, 'tool', resultText.length > 0 ? `${detail}\n\n【结果】\n${resultText}` : detail)
+    attachDisclosure(rowEl, 'tool', resultText.length > 0 ? `${detail}\n\n${t('inject.result')}\n${resultText}` : detail)
   } else if (node.kind === 'context') {
     // 上下文注入行（反思/dream 指令 prompt）：补完整文本可展开查看。
     const content = (node.data as { content?: readonly { type?: string; text?: string }[] }).content
@@ -330,11 +334,11 @@ async function copyInjectionText(button: HTMLButtonElement, text: string): Promi
   }
   if (!ok || button.dataset.meowInjState === 'copied') return
   button.dataset.meowInjState = 'copied'
-  button.title = '已复制'
+  button.title = t('inject.copied')
   button.innerHTML = CHECK_ICON_SVG
   window.setTimeout(() => {
     button.dataset.meowInjState = 'copy'
-    button.title = '复制'
+    button.title = t('inject.copy')
     button.innerHTML = COPY_ICON_SVG
   }, 1000)
 }
@@ -380,8 +384,8 @@ function applyInjectionFold(
         bar.addEventListener('click', () => onToggle(group.id))
         anchor.appendChild(bar)
       }
-      const kindLabel = group.kind === 'first' ? '（长期记忆）' : '（关键词命中）'
-      const label = `${expanded.has(group.id) ? '▾' : '▸'} 已注入记忆${kindLabel}`
+      const kindLabel = t(group.kind === 'first' ? 'inject.kind.first' : 'inject.kind.hit')
+      const label = `${expanded.has(group.id) ? '▾' : '▸'} ${t('inject.bar')}${kindLabel}`
       if (bar.textContent !== label) bar.textContent = label
       let body = anchor.querySelector<HTMLElement>(`:scope > [${INJ_BODY_ATTR}]`)
       if (body === null) {
@@ -416,7 +420,8 @@ function applyInjectionFold(
         const copyButton = document.createElement('button')
         copyButton.type = 'button'
         copyButton.dataset.meowInjCopy = 'true'
-        copyButton.title = '复制'
+        copyButton.title = t('inject.copy')
+        copyButton.setAttribute('aria-label', t('inject.copy'))
         copyButton.innerHTML = COPY_ICON_SVG
         copyButton.addEventListener('click', () => {
           if (group.userText !== undefined) {
@@ -584,6 +589,17 @@ export function MemoryFoldDock(props: {
     }
   }, [])
 
+  // UI 语言切换（DSH 设置 → 通用 → 语言）：横条/气泡文案是纯 DOM 写入，不会随
+  // React 重渲染自动更新——用重放注册表在语言变化时用当前语言重刷一次。重放读
+  // ref 里的最新快照（订阅回调不依赖闭包时序），且与 observer 同款幂等。
+  useEffect(() => {
+    return onUiLocaleChange(() => {
+      applyFoldState(latest.current.groups, latest.current.expanded, latest.current.toggle, latest.current.snapshot as never)
+      applyInjectionFold(latest.current.injGroups, latest.current.injExpanded, latest.current.toggleInj)
+      applyDelegateNotices(latest.current.dgNotices)
+    })
+  }, [])
+
   return null
 }
 
@@ -653,6 +669,14 @@ export const inject = ['slots', 'settingsScope', 'sessions']
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function apply(ctx: any): () => void {
   const disposers: Array<() => void> = []
+  // UI 文案层（v0.27.0）：跟随 DSH 语言设置（zh/en/pt-br），并向 locale 服务注册
+  // 本插件的语言与字典。必须在设置页/折叠/气泡读取文案之前装好；无 locale 服务
+  // 的老宿主自动降级（浏览器语言 + 内置字典），失败只告警不阻断插件。
+  try {
+    installI18n(ctx)
+  } catch (e) {
+    console.warn('[meow-memory] 文案层初始化失败（UI 退回默认语言）：', e)
+  }
   // 会话列表"已 dream"小月牙：独立于 slots，直接启动（host 路由不可用时静默降级）。
   disposers.push(startDreamIconManager())
   // delegate 打点气泡的 dream 状态同步（SSE）：dream 完成时气泡「处理中…」→「已完成 ✓」。
@@ -662,7 +686,7 @@ export function apply(ctx: any): () => void {
   // 设置页「喵记忆」标签页（settings.section 顶级分区）：settingsScope 服务缺失
   // 或注册失败只警告，不影响折叠/图标。
   try {
-    applySettingsPage(ctx)
+    disposers.push(applySettingsPage(ctx))
   } catch (e) {
     console.warn('[meow-memory] 设置页注册失败（不影响折叠与图标）：', e)
   }

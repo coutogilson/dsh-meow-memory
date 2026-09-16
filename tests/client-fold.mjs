@@ -15,7 +15,7 @@ const { outputFiles } = await build({
 })
 const code = new TextDecoder().decode(outputFiles[0].contents)
 const modUrl = 'data:text/javascript;base64,' + Buffer.from(code).toString('base64')
-const { computeFoldGroups, foldLabel, toolCallDetail, blocksToText, computeInjectionGroups, formatInjectionClock, memoryTurnNumbers } = await import(modUrl)
+const { computeFoldGroups, foldLabel, toolCallDetail, blocksToText, computeInjectionGroups, formatInjectionClock, memoryTurnNumbers, setUiLocaleForTest } = await import(modUrl)
 
 // ---- mock 快照 ----
 function turnLoc(turn) {
@@ -244,12 +244,22 @@ console.log('=== 5. tool-result 形态计数 ===')
 console.log('=== 6. foldLabel 文案 ===')
 {
   const base = { id: 'x', variant: 'reflect', keys: [], rememberCount: 0, updateCount: 0, status: 'done' }
+  // 文案经 i18n 层（跟随 DSH 语言设置）：先锁 zh 保持历史断言，再补 en / pt-br。
+  setUiLocaleForTest('zh')
   check('新增记忆 3 条', foldLabel({ ...base, rememberCount: 3 }, false) === '▸ 记忆反思 · 新增记忆 3 条')
   check('无需记忆', foldLabel(base, false) === '▸ 记忆反思 · 无需记忆')
   check('running', foldLabel({ ...base, status: 'running' }, false) === '▸ 记忆反思进行中…')
   check('已更新 2 条', foldLabel({ ...base, updateCount: 2 }, false) === '▸ 记忆反思 · 已更新 2 条')
   check('dream 新增', foldLabel({ ...base, variant: 'dream', rememberCount: 1 }, true) === '▾ 记忆梦境任务 · 新增记忆 1 条')
   check('中断', foldLabel({ ...base, status: 'interrupted' }, false) === '▸ 记忆反思已中断')
+  setUiLocaleForTest('en')
+  check('en 新增记忆 3 条', foldLabel({ ...base, rememberCount: 3 }, false) === '▸ Memory reflection · 3 memories added')
+  check('en 无需记忆', foldLabel(base, false) === '▸ Memory reflection · nothing to save')
+  check('en dream 中断', foldLabel({ ...base, variant: 'dream', status: 'interrupted' }, false) === '▸ Memory dream task interrupted')
+  setUiLocaleForTest('pt-br')
+  check('pt-br 新增记忆 3 条', foldLabel({ ...base, rememberCount: 3 }, false) === '▸ Reflexão de memória · 3 memórias adicionadas')
+  check('pt-br running', foldLabel({ ...base, status: 'running' }, false) === '▸ Reflexão de memória em andamento…')
+  setUiLocaleForTest('zh')
 }
 
 // ---- 7. 并行 tool-call 各自成节点（反思轮真实形态） ----
@@ -363,10 +373,18 @@ console.log('=== 10. formatInjectionClock ===')
 {
   const now = new Date(2026, 7, 23, 15, 0).getTime() // 2026-08-23 15:00 本地
   const mk = (y, mo, d, h, mi) => new Date(y, mo, d, h, mi).getTime()
+  setUiLocaleForTest('zh')
   check('同天 → HH:mm', formatInjectionClock(mk(2026, 7, 23, 9, 5), now) === '09:05')
   check('同天 → HH:mm 补零', formatInjectionClock(mk(2026, 7, 23, 15, 0), now) === '15:00')
   check('今年非今天 → M月D日 HH:mm', formatInjectionClock(mk(2026, 0, 2, 8, 30), now) === '1月2日 08:30')
   check('跨年 → Y年M月D日 HH:mm', formatInjectionClock(mk(2025, 11, 31, 23, 59), now) === '2025年12月31日 23:59')
+  setUiLocaleForTest('en')
+  check('en 今年非今天 → M/D HH:mm', formatInjectionClock(mk(2026, 0, 2, 8, 30), now) === '1/2 08:30')
+  check('en 跨年 → Y/M/D HH:mm', formatInjectionClock(mk(2025, 11, 31, 23, 59), now) === '2025/12/31 23:59')
+  setUiLocaleForTest('pt-br')
+  check('pt-br 今年非今天 → D/M HH:mm', formatInjectionClock(mk(2026, 0, 2, 8, 30), now) === '2/1 08:30')
+  check('pt-br 跨年 → D/M/Y HH:mm', formatInjectionClock(mk(2025, 11, 31, 23, 59), now) === '31/12/2025 23:59')
+  setUiLocaleForTest('zh')
 }
 
 console.log(failures === 0 ? '\nALL CLIENT-FOLD TESTS PASSED ✅' : `\n${failures} FAILURES ❌`)

@@ -15,7 +15,7 @@ const { outputFiles } = await build({
 })
 const code = new TextDecoder().decode(outputFiles[0].contents)
 const modUrl = 'data:text/javascript;base64,' + Buffer.from(code).toString('base64')
-const { skipLabel, captureSessionIdFromTarget, retitleLeaf, setMenuIcon, injectSkipItem, resolveMenuSessionId, SESSION_ROW_SEL, MENU_OPEN_ROW_SEL, SKIP_ITEM_ATTR } = await import(modUrl)
+const { skipLabel, captureSessionIdFromTarget, retitleLeaf, setMenuIcon, injectSkipItem, resolveMenuSessionId, SESSION_ROW_SEL, MENU_OPEN_ROW_SEL, SKIP_ITEM_ATTR, setUiLocaleForTest } = await import(modUrl)
 
 let passed = 0
 let failed = 0
@@ -24,9 +24,16 @@ function check(name, cond, detail = '') {
   else { failed++; console.log(`FAIL  ${name} ${detail}`) }
 }
 
-// ── skipLabel ────────────────────────────────────────────────────────────────
+// ── skipLabel（文案经 i18n 层：跟随 DSH 语言设置） ───────────────────────────
+setUiLocaleForTest('zh')
 check('label unskipped', skipLabel(false) === '跳过梦境整理记忆')
 check('label skipped', skipLabel(true) === '取消跳过梦境整理记忆')
+setUiLocaleForTest('en')
+check('en label unskipped', skipLabel(false) === 'Skip dream memory consolidation')
+check('en label skipped', skipLabel(true) === 'Resume dream memory consolidation')
+setUiLocaleForTest('pt-br')
+check('pt-br label unskipped', skipLabel(false) === 'Pular a consolidação de memória (dream)')
+setUiLocaleForTest('zh')
 
 // ── captureSessionIdFromTarget ───────────────────────────────────────────────
 // fake 行：带 React fiber 属性 + return 链上第一个带 key 的 fiber（readSessionId 协议）。

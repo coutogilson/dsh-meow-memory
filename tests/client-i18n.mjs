@@ -1,0 +1,288 @@
+/**
+ * client-i18n 测试：界面文案层（字典完整性 + 语言解析 + DSH locale 服务接线 +
+ * foldLabel / skipLabel / delegateNoticeLabelFor / formatInjectionClock 的多语言输出）。
+ *
+ * 运行：node tests/client-i18n.mjs（内部 esbuild 现场打包源码，保证与 src 同步）。
+ */
+import { build } from 'esbuild'
+import vm from 'node:vm'
+
+/**
+ * 现场打包一个源文件为 ESM，并在独立的 vm 模块图里求值。
+ *
+ * 为什么不用 data: URL import：esbuild 对同一份输入返回同一模块实例，多次
+ * bundleSrc('src/i18n/index.ts') 会共享模块级状态（语言注册表 / 订阅表），
+ * 用例之间互相污染。vm.SourceTextModule 每次都是全新的模块图，语义与浏览器
+ * 里「一份 bundle 一个实例」一致。
+ */
+async function bundleSrc(entry) {
+  const { outputFiles } = await build({
+    entryPoints: [entry],
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    write: false,
+    logLevel: 'silent',
+  })
+  const code = new TextDecoder().decode(outputFiles[0].contents)
+  const context = vm.createContext({
+    console,
+    URL,
+    TextDecoder,
+    TextEncoder,
+    setTimeout,
+    clearTimeout,
+    setInterval,
+    clearInterval,
+    Buffer,
+    process,
+  })
+  const module = new vm.SourceTextModule(code, { context, identifier: entry })
+  await module.link(() => {
+    throw new Error(`unexpected import while linking ${entry}`)
+  })
+  await module.evaluate()
+  return module.namespace
+}
+
+let passed = 0
+let failed = 0
+function check(name, cond, detail = '') {
+  if (cond) {
+    passed++
+    console.log(`  ok  ${name}`)
+  } else {
+    failed++
+    console.log(`FAIL  ${name} ${detail}`)
+  }
+}
+
+// ── 1. 字典完整性（keys.ts 是真源，三份字典必须逐键覆盖） ────────────────────
+console.log('=== 1. 字典完整性 ===')
+const i18n = await bundleSrc('src/i18n/index.ts')
+const { UI_KEYS, missingKeys, extraKeys, en, zh, ptBr, t, setUiLocaleForTest, getUiLocale, installI18n, onUiLocaleChange, NS, SUPPORTED_UI_LOCALES } = i18n
+
+check('en 无缺键', missingKeys(en).length === 0, JSON.stringify(missingKeys(en).slice(0, 5)))
+check('zh 无缺键', missingKeys(zh).length === 0, JSON.stringify(missingKeys(zh).slice(0, 5)))
+check('ptBr 无缺键', missingKeys(ptBr).length === 0, JSON.stringify(missingKeys(ptBr).slice(0, 5)))
+check('en 无多余键', extraKeys(en).length === 0, JSON.stringify(extraKeys(en)))
+check('zh 无多余键', extraKeys(zh).length === 0, JSON.stringify(extraKeys(zh)))
+check('pt-br 无多余键', extraKeys(ptBr).length === 0, JSON.stringify(extraKeys(ptBr)))
+
+// 占位符一致：模板里出现的 {name} 在三份字典里必须相同（否则运行时漏填）。
+const paramsOf = (text) => [...new Set([...text.matchAll(/\{([a-zA-Z][a-zA-Z0-9_]*)\}/g)].map((m) => m[1]))].sort().join(',')
+let placeholderMismatch = []
+for (const key of UI_KEYS) {
+  const a = paramsOf(en[key])
+  const b = paramsOf(zh[key])
+  const c = paramsOf(ptBr[key])
+  if (a !== b || a !== c) placeholderMismatch.push(`${key}: en[${a}] zh[${b}] pt-br[${c}]`)
+}
+check('三语占位符集合一致', placeholderMismatch.length === 0, placeholderMismatch.slice(0, 5).join(' | '))
+
+check('语言目录含 zh/en/pt-br', SUPPORTED_UI_LOCALES.map((l) => l.id).join(',') === 'zh,en,pt-br')
+check('命名空间 = meow-memory', NS === 'meow-memory')
+
+// ── 2. 无 DSH 服务时的静态查表（降级路径） ───────────────────────────────────
+console.log('=== 2. 静态查表（老宿主降级） ===')
+setUiLocaleForTest('zh')
+check('zh 取中文', t('menu.skipDream') === '跳过梦境整理记忆')
+check('zh 占位符填充', t('fold.status.remembered', { title: '记忆反思', n: 3 }) === '记忆反思 · 新增记忆 3 条')
+setUiLocaleForTest('en')
+check('en 取英文', t('menu.skipDream') === 'Skip dream memory consolidation')
+check('en 占位符填充', t('fold.status.remembered', { title: 'Memory reflection', n: 3 }) === 'Memory reflection · 3 memories added')
+check('en 日期模板', t('datetime.ymd', { m: 1, d: 2 }) === '1/2')
+setUiLocaleForTest('pt-br')
+check('pt-br 取葡语', t('menu.skipDream') === 'Pular a consolidação de memória (dream)')
+check('pt-br 占位符填充', t('fold.status.remembered', { title: 'Reflexão de memória', n: 2 }) === 'Reflexão de memória · 2 memórias adicionadas')
+check('pt-br 日期模板（日在前）', t('datetime.ymd', { m: 9, d: 16 }) === '16/9')
+// 未登记的语言（服务给了我们没见过的标签）→ 主标签，仍不匹配落 en。
+setUiLocaleForTest('ja')
+check('未登记语言落 en', t('menu.skipDream') === 'Skip dream memory consolidation')
+setUiLocaleForTest('zh')
+
+// ── 3. 语言变化订阅（设置页 / DOM 重放的接点） ────────────────────────────────
+console.log('=== 3. 语言变化订阅 ===')
+const seen = []
+const unsubscribe = onUiLocaleChange((locale) => seen.push(locale))
+check('订阅时立即回调当前值', seen.length === 1 && seen[0] === 'zh', JSON.stringify(seen))
+setUiLocaleForTest('pt-br')
+check('语言变化回调新语言', seen.length === 2 && seen[1] === 'pt-br', JSON.stringify(seen))
+unsubscribe()
+setUiLocaleForTest('en')
+check('退订后不再回调', seen.length === 2, JSON.stringify(seen))
+
+// ── 4. DSH locale 服务接线（跟随宿主语言设置） ───────────────────────────────
+console.log('=== 4. DSH locale 服务接线 ===')
+/** 最小 DSH locale 服务替身：注册表 + fallback 链，语义对齐 LocaleRuntime。 */
+function makeFakeService() {
+  const dicts = new Map() // ns -> Map(locale -> dict)
+  const catalog = new Map([['zh', { id: 'zh', label: '中文' }], ['en', { id: 'en', label: 'English' }]])
+  const fallback = new Map([['zh', 'en']])
+  const state = { active: 'en', revision: 1 }
+  const listeners = new Set()
+  const calls = { addLanguage: [], register: [] }
+  const chainOf = (locale) => {
+    const out = []
+    for (let cur = locale; cur !== undefined; cur = fallback.get(cur)) out.push(cur)
+    return out
+  }
+  return {
+    calls,
+    state,
+    getLocale: () => ({ active: state.active, locales: [...catalog.values()], revision: state.revision }),
+    subscribe: (fn) => {
+      listeners.add(fn)
+      return () => listeners.delete(fn)
+    },
+    setLocale: (id) => {
+      state.active = id
+      state.revision++
+      for (const fn of [...listeners]) fn()
+    },
+    addLanguage: (input) => {
+      calls.addLanguage.push({ ...input })
+      catalog.set(input.id, { id: input.id, label: input.label })
+      fallback.set(input.id, input.fallback)
+      return () => catalog.delete(input.id)
+    },
+    register: (ns, locale, dict) => {
+      calls.register.push({ ns, locale, keys: Object.keys(dict).length })
+      if (!dicts.has(ns)) dicts.set(ns, new Map())
+      dicts.get(ns).set(locale, dict)
+      state.revision++
+      return () => dicts.get(ns).delete(locale)
+    },
+    bind: (ns) => (key, params) => {
+      const byLocale = dicts.get(ns)
+      let template
+      for (const locale of chainOf(state.active)) {
+        const hit = byLocale?.get(locale)?.[key]
+        if (hit !== undefined) {
+          template = hit
+          break
+        }
+      }
+      if (template === undefined) return key
+      if (params === undefined) return template
+      return template.replace(/\{(\w+)\}/g, (m, name) => (name in params ? String(params[name]) : m))
+    },
+  }
+}
+
+const service = makeFakeService()
+const warnings = []
+const installed = installI18n({ get: (name) => (name === 'locale' ? service : undefined) }, (m) => warnings.push(m))
+check('注册语言目录（pt-br，fallback=en）', service.calls.addLanguage.length === 1 && service.calls.addLanguage[0].id === 'pt-br' && service.calls.addLanguage[0].fallback === 'en', JSON.stringify(service.calls.addLanguage))
+check('注册三语字典', service.calls.register.length === 3 && service.calls.register.every((c) => c.ns === 'meow-memory'), JSON.stringify(service.calls.register))
+check('返回已注册语言列表', installed.join(',') === 'zh,en,pt-br', installed.join(','))
+check('无告警', warnings.length === 0, warnings.join(' | '))
+check('active 跟随服务（en）', getUiLocale() === 'en')
+check('服务语言取英文', t('menu.skipDream') === 'Skip dream memory consolidation')
+
+service.setLocale('pt-br')
+check('切到 pt-br 后取葡语', t('menu.skipDream') === 'Pular a consolidação de memória (dream)')
+check('切语言触发订阅（UI 重放）', getUiLocale() === 'pt-br')
+
+// 服务缺键 → 走服务自己的 fallback 链（pt-br → en），而不是留空/键名。
+const thinService = makeFakeService()
+thinService.register('meow-memory', 'en', { 'menu.skipDream': 'EN ONLY' })
+thinService.register('meow-memory', 'pt-br', {})
+thinService.addLanguage({ id: 'pt-br', label: 'x', fallback: 'en' })
+thinService.state.active = 'pt-br'
+const thin = await bundleSrc('src/i18n/index.ts')
+thin.installI18n({ get: () => thinService })
+check('服务字典缺键落 en（fallback 链）', thin.t('menu.skipDream') === 'EN ONLY')
+
+// 重复 install 幂等：不再重复 addLanguage/register。
+const before = { add: service.calls.addLanguage.length, reg: service.calls.register.length }
+installI18n({ get: () => service })
+check('重复 install 不重复注册语言', service.calls.addLanguage.length === before.add)
+check('重复 install 不重复注册字典', service.calls.register.length === before.reg)
+check('重复 install 不告警', warnings.length === 0, warnings.join(' | '))
+
+// 无 locale 服务（老宿主 / 受限动态 ctx）：不抛错，退化到静态查表。
+const legacyWarnings = []
+const legacy = await bundleSrc('src/i18n/index.ts')
+const legacyInstalled = legacy.installI18n({ get: () => undefined }, (m) => legacyWarnings.push(m))
+check('无服务不抛错且返回空列表', Array.isArray(legacyInstalled) && legacyInstalled.length === 0)
+check('无服务无告警', legacyWarnings.length === 0, legacyWarnings.join(' | '))
+legacy.setUiLocaleForTest('pt-br')
+check('无服务仍能取葡语（静态查表）', legacy.t('menu.skipDream') === 'Pular a consolidação de memória (dream)')
+
+// 服务 addLanguage 抛错（语言已被别的包占用）：只告警，字典照常注册。
+const brokenService = makeFakeService()
+brokenService.addLanguage = () => {
+  throw new Error('locale id "pt-br" is occupied')
+}
+const brokenWarnings = []
+const broken = await bundleSrc('src/i18n/index.ts')
+const brokenRet = broken.installI18n({ get: () => brokenService }, (m) => brokenWarnings.push(m))
+check('语言占用只告警', brokenWarnings.length === 1 && brokenWarnings[0].includes('pt-br'), JSON.stringify(brokenWarnings))
+check('语言占用仍注册字典', brokenService.calls.register.length === 3, JSON.stringify(brokenService.calls.register.map((c) => c.locale)))
+
+// ── 5. 各模块的多语言输出 ───────────────────────────────────────────────────
+console.log('=== 5. 模块文案（foldLabel / skipLabel / notice / clock） ===')
+const fold = await bundleSrc('src/client-fold.ts')
+const skip = await bundleSrc('src/client-dream-skip.ts')
+const notice = await bundleSrc('src/client-delegate-notice.ts')
+const base = { id: 'g', variant: 'reflect', keys: [], rememberCount: 0, updateCount: 0, status: 'done' }
+
+fold.setUiLocaleForTest('zh')
+check('zh foldLabel 新增', fold.foldLabel({ ...base, rememberCount: 3 }, false) === '▸ 记忆反思 · 新增记忆 3 条')
+fold.setUiLocaleForTest('en')
+check('en foldLabel 新增', fold.foldLabel({ ...base, rememberCount: 3 }, false) === '▸ Memory reflection · 3 memories added')
+check('en foldLabel dream running', fold.foldLabel({ ...base, variant: 'dream', status: 'running' }, true) === '▾ Memory dream task in progress…')
+check('en foldLabel 无需记忆', fold.foldLabel(base, false) === '▸ Memory reflection · nothing to save')
+fold.setUiLocaleForTest('pt-br')
+check('pt-br foldLabel 新增', fold.foldLabel({ ...base, rememberCount: 3 }, false) === '▸ Reflexão de memória · 3 memórias adicionadas')
+check('pt-br foldLabel 已更新', fold.foldLabel({ ...base, updateCount: 2 }, false) === '▸ Reflexão de memória · 2 atualizadas')
+
+const now = new Date(2026, 8, 16, 12, 0).getTime()
+const earlier = new Date(2026, 0, 2, 8, 30).getTime()
+const crossYear = new Date(2025, 11, 31, 23, 59).getTime()
+fold.setUiLocaleForTest('zh')
+check('zh 时钟 今年', fold.formatInjectionClock(earlier, now) === '1月2日 08:30')
+fold.setUiLocaleForTest('en')
+check('en 时钟 今年', fold.formatInjectionClock(earlier, now) === '1/2 08:30')
+check('en 时钟 跨年', fold.formatInjectionClock(crossYear, now) === '2025/12/31 23:59')
+fold.setUiLocaleForTest('pt-br')
+check('pt-br 时钟 今年', fold.formatInjectionClock(earlier, now) === '2/1 08:30')
+check('pt-br 时钟 跨年', fold.formatInjectionClock(crossYear, now) === '31/12/2025 23:59')
+
+skip.setUiLocaleForTest('zh')
+check('zh 菜单文案', skip.skipLabel(false) === '跳过梦境整理记忆' && skip.skipLabel(true) === '取消跳过梦境整理记忆')
+skip.setUiLocaleForTest('en')
+check('en 菜单文案', skip.skipLabel(false) === 'Skip dream memory consolidation' && skip.skipLabel(true) === 'Resume dream memory consolidation')
+skip.setUiLocaleForTest('pt-br')
+check('pt-br 菜单文案', skip.skipLabel(false) === 'Pular a consolidação de memória (dream)')
+
+notice.setUiLocaleForTest('zh')
+check('zh 气泡文案', notice.delegateNoticeLabelFor('dream', false) === '▸ 梦境记忆整理任务已完成。')
+notice.setUiLocaleForTest('en')
+check('en 气泡文案', notice.delegateNoticeLabelFor('dream', true) === '▸ Memory dream task in progress…')
+check('en 气泡中断', notice.delegateNoticeLabelFor('dream', true, true) === '▸ Memory dream task interrupted; retrying automatically later.')
+check('en reflect-done 恒已完成', notice.delegateNoticeLabelFor('reflect-done', true) === '▸ Memory reflection task completed.')
+notice.setUiLocaleForTest('pt-br')
+check('pt-br 气泡文案', notice.delegateNoticeLabelFor('reflect', true) === '▸ Tarefa de reflexão de memória em andamento…')
+
+// ── 6. 纯 DOM 节点的语言重放注册表 ──────────────────────────────────────────
+console.log('=== 6. UI 语言重放注册表 ===')
+const replay = await bundleSrc('src/client-i18n-replay.ts')
+let replayed = 0
+const unregister = replay.registerUiReplayer(() => { replayed++ })
+replay.setUiLocaleForTest('en')
+check('语言变化触发重放', replayed === 1, String(replayed))
+unregister()
+replay.setUiLocaleForTest('pt-br')
+check('退订后不再重放', replayed === 1, String(replayed))
+// 单个重放函数抛错不影响其它订阅者。
+const replay2 = await bundleSrc('src/client-i18n-replay.ts')
+let second = 0
+replay2.registerUiReplayer(() => { throw new Error('boom') })
+replay2.registerUiReplayer(() => { second++ })
+replay2.setUiLocaleForTest('en')
+check('单个重放失败不阻断其它', second === 1, String(second))
+
+console.log(`\n${passed} passed, ${failed} failed`)
+process.exit(failed === 0 ? 0 : 1)

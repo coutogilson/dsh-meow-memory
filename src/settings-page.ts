@@ -14,6 +14,7 @@
 
 import * as React from 'react'
 import { factoryDefaultOf } from './defaults.js'
+import { getUiLocale, onUiLocaleChange, t, UI_KEYS, type UiKey } from './i18n/index.js'
 
 const SETTINGS_NS = 'meow-memory'
 const CSS_ID = 'meow-memory-settings-css'
@@ -45,73 +46,85 @@ const CSS = `
 
 const el = React.createElement
 
-/** 字段元数据：sub 缺省=顶层标量；sub 给定=dream/delegate 子键。 */
+/**
+ * 字段元数据：sub 缺省=顶层标量；sub 给定=dream/delegate 子键。
+ * label/hint/placeholder 存的是 i18n 键（不是文案本身）：渲染时才查表，语言切换
+ * 自动跟随（设置页订阅 onUiLocaleChange 重渲染）。加语言只动字典，不动这张表。
+ */
 interface FieldSpec {
   key: string
   sub?: string
-  label: string
+  label: UiKey
   type: 'bool' | 'num' | 'str'
-  hint?: string
+  hint?: UiKey
   placeholder?: string
 }
 
 interface GroupSpec {
-  title: string
+  title: UiKey
   fields: FieldSpec[]
 }
 
 const FIELDS: GroupSpec[] = [
   {
-    title: '基础',
+    title: 'settings.group.base',
     fields: [
-      { key: 'enabled', label: '总开关', type: 'bool', hint: '关闭后注入、反思、记忆工具全部停用' },
-      { key: 'projectDir', label: '记忆目录', type: 'str', hint: '相对工作区的数据目录', placeholder: '.dsh-meow' },
-      { key: 'autoMigrate', label: '自动迁移旧库', type: 'bool', hint: '首次打开 v1 库时自动迁移 PROJECT.md' },
+      { key: 'enabled', label: 'settings.field.enabled.label', type: 'bool', hint: 'settings.field.enabled.hint' },
+      { key: 'projectDir', label: 'settings.field.projectDir.label', type: 'str', hint: 'settings.field.projectDir.hint', placeholder: '.dsh-meow' },
+      { key: 'autoMigrate', label: 'settings.field.autoMigrate.label', type: 'bool', hint: 'settings.field.autoMigrate.hint' },
     ],
   },
   {
-    title: '注入与命中',
+    title: 'settings.group.inject',
     fields: [
-      { key: 'hitTopK', label: '每条消息命中条数上限', type: 'num', hint: '关键词命中注入的条目上限（fact/lesson/rules/topic）' },
-      { key: 'titleMax', label: '导引标题截断长度', type: 'num', hint: '记忆导引里项目列表的截断长度（字符）' },
+      { key: 'hitTopK', label: 'settings.field.hitTopK.label', type: 'num', hint: 'settings.field.hitTopK.hint' },
+      { key: 'titleMax', label: 'settings.field.titleMax.label', type: 'num', hint: 'settings.field.titleMax.hint' },
     ],
   },
   {
-    title: '反思',
+    title: 'settings.group.reflect',
     fields: [
-      { key: 'reflect', label: '自动反思', type: 'bool', hint: '任务结束后自动回顾记忆' },
-      { key: 'reflectTurns', label: '反思触发轮数', type: 'num', hint: '单任务内连续工具步达到该值才在结束时触发' },
+      { key: 'reflect', label: 'settings.field.reflect.label', type: 'bool', hint: 'settings.field.reflect.hint' },
+      { key: 'reflectTurns', label: 'settings.field.reflectTurns.label', type: 'num', hint: 'settings.field.reflectTurns.hint' },
     ],
   },
   {
-    title: '整理任务模型',
+    title: 'settings.group.delegate',
     fields: [
-      { key: 'model', sub: 'delegate', label: '反思/梦境换模型', type: 'str', hint: "留空=全程主模型。填写后反思轮与梦境轮自动换用该模型执行，轮次结束自动换回主模型（其余对话不受影响）；'provider/model' 指定路由，'model' 只换模型名", placeholder: '如 zai-coding-cn/glm-5.3-flash' },
+      { key: 'model', sub: 'delegate', label: 'settings.field.delegateModel.label', type: 'str', hint: 'settings.field.delegateModel.hint', placeholder: 'settings.field.delegateModel.placeholder' },
     ],
   },
   {
-    title: '空闲整理（dream）',
+    title: 'settings.group.dream',
     fields: [
-      { key: 'enabled', sub: 'dream', label: '空闲整理开关', type: 'bool' },
-      { key: 'idleMinutes', sub: 'dream', label: '空闲分钟数', type: 'num', hint: '窗口空闲满该分钟数即允许 dream' },
-      { key: 'suppressWindows', sub: 'dream', label: '峰时抑制时段', type: 'str', hint: '"HH:MM-HH:MM" 逗号分隔；这些时段内不触发 dream', placeholder: "09:00-12:00, 14:00-18:00" },
-      { key: 'suppressLeadMinutes', sub: 'dream', label: '峰时前追加抑制（分钟）', type: 'num' },
-      { key: 'checkMinutes', sub: 'dream', label: '检查周期（分钟）', type: 'num' },
-      { key: 'timeZone', sub: 'dream', label: '抑制时段时区', type: 'str', hint: '峰时窗口按此固定时区计算（与系统时钟无关）' },
-      { key: 'rulesReviewDays', sub: 'dream', label: '准则防 churn 天数', type: 'num', hint: 'updated_at 距今超该天数的稳定准则不进 dream 第 1 轮；0=不过滤' },
+      { key: 'enabled', sub: 'dream', label: 'settings.field.dreamEnabled.label', type: 'bool' },
+      { key: 'idleMinutes', sub: 'dream', label: 'settings.field.dream.idleMinutes.label', type: 'num', hint: 'settings.field.dream.idleMinutes.hint' },
+      { key: 'suppressWindows', sub: 'dream', label: 'settings.field.dream.suppressWindows.label', type: 'str', hint: 'settings.field.dream.suppressWindows.hint', placeholder: '09:00-12:00, 14:00-18:00' },
+      { key: 'suppressLeadMinutes', sub: 'dream', label: 'settings.field.dream.suppressLeadMinutes.label', type: 'num' },
+      { key: 'checkMinutes', sub: 'dream', label: 'settings.field.dream.checkMinutes.label', type: 'num' },
+      { key: 'timeZone', sub: 'dream', label: 'settings.field.dream.timeZone.label', type: 'str', hint: 'settings.field.dream.timeZone.hint' },
+      { key: 'rulesReviewDays', sub: 'dream', label: 'settings.field.dream.rulesReviewDays.label', type: 'num', hint: 'settings.field.dream.rulesReviewDays.hint' },
     ],
   },
   {
-    title: '语言',
+    title: 'settings.group.language',
     fields: [
-      { key: 'promptLang', label: 'prompt 与检索语言', type: 'str', hint: "留空=默认 zh（未配置过的会话会收到一次首用引导）；'en'=内置英文语言包。语言必须与你说的话一致，否则关键词命中率下降", placeholder: "zh / en" },
+      { key: 'promptLang', label: 'settings.field.promptLang.label', type: 'str', hint: 'settings.field.promptLang.hint', placeholder: 'settings.field.promptLang.placeholder' },
     ],
   },
 ]
 
+/** 占位符既可为字面量（'.dsh-meow'）也可为 i18n 键：是已知键则翻译，否则原样。 */
+function placeholderOf(spec: FieldSpec): string | undefined {
+  if (spec.placeholder === undefined) return undefined
+  return (UI_KEYS as readonly string[]).includes(spec.placeholder)
+    ? t(spec.placeholder as UiKey)
+    : spec.placeholder
+}
+
 const SUPPRESS_RE = /^\d{1,2}:\d{2}-\d{1,2}:\d{2}$/
 
-/** 峰时文本 → 结构化数组（解析失败返回错误文案）。 */
+/** 峰时文本 → 结构化数组（解析失败返回错误文案，文案经 i18n 层）。 */
 export function parseSuppressWindows(text: string): { value?: Array<{ start: string; end: string }>; error?: string } {
   const trimmed = text.trim()
   if (trimmed === '') return { value: [] }
@@ -120,10 +133,10 @@ export function parseSuppressWindows(text: string): { value?: Array<{ start: str
     const seg = part.trim()
     if (!seg) continue
     const m = /^(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})$/.exec(seg)
-    if (!m) return { error: `时段格式应为 "HH:MM-HH:MM"，收到 "${seg}"` }
+    if (!m) return { error: t('settings.suppress.format', { value: seg }) }
     out.push({ start: m[1], end: m[2] })
   }
-  if (out.length === 0) return { error: '至少一个时段' }
+  if (out.length === 0) return { error: t('settings.suppress.atLeastOne') }
   return { value: out }
 }
 
@@ -168,8 +181,16 @@ function jsonEqual(a: unknown, b: unknown): boolean {
 
 // ── 页面 ────────────────────────────────────────────────────────────────────
 
-function MemorySettingsSection(props: { scope: any }): any {
+/** 订阅界面语言：语言一变就用新字典重渲染本页（页面文案全部在渲染时查表）。 */
+function useUiLocale(): string {
+  const subscribe = React.useCallback((cb: () => void) => onUiLocaleChange(() => cb()), [])
+  return React.useSyncExternalStore(subscribe, getUiLocale, getUiLocale)
+}
+
+/** 设置页主体（导出供测试渲染：createElement 树可直接断言文案）。 */
+export function MemorySettingsSection(props: { scope: any }): any {
   const scope = props.scope
+  useUiLocale()
   const subscribe = React.useCallback((cb: () => void) => scope.subscribe(cb), [scope])
   const getSnapshot = React.useCallback(() => scope.getSnapshot(), [scope])
   const snap: {
@@ -225,7 +246,7 @@ function MemorySettingsSection(props: { scope: any }): any {
         await scope.set(spec.sub, parent)
       }
     } catch (e) {
-      setError(`保存失败：${e instanceof Error ? e.message : String(e)}`)
+      setError(t('settings.saveFailed', { error: e instanceof Error ? e.message : String(e) }))
       return false
     }
     const landed = (): boolean => {
@@ -248,7 +269,7 @@ function MemorySettingsSection(props: { scope: any }): any {
     // 失败：清草稿真正回落到服务器值（镜像已被 client recover 重载），
     // 与错误文案「已恢复显示服务器当前值」保持一致。
     clearDraft(spec)
-    setError('保存未生效：写入被服务器拒绝（可能未通过校验），已恢复显示服务器当前值。')
+    setError(t('settings.saveNotApplied'))
     return false
   }
 
@@ -304,18 +325,18 @@ function MemorySettingsSection(props: { scope: any }): any {
       if (landed()) {
         flashSaved()
       } else {
-        setError('恢复默认未生效，请重试。')
+        setError(t('settings.resetNotApplied'))
       }
     } catch (e) {
-      setError(`恢复默认失败：${e instanceof Error ? e.message : String(e)}`)
+      setError(t('settings.resetFailed', { error: e instanceof Error ? e.message : String(e) }))
     }
   }
 
   if (snap.status === 'loading') {
-    return el('div', { className: 'meowmm_set_page' }, el('span', { className: 'meowmm_set_muted' }, '喵记忆配置加载中…'))
+    return el('div', { className: 'meowmm_set_page' }, el('span', { className: 'meowmm_set_muted' }, t('settings.loading')))
   }
   if (snap.status === 'unavailable') {
-    return el('div', { className: 'meowmm_set_page' }, el('span', { className: 'meowmm_set_muted' }, '当前连接不支持设置写入（仅本机回环连接可编辑）。'))
+    return el('div', { className: 'meowmm_set_page' }, el('span', { className: 'meowmm_set_muted' }, t('settings.unavailable')))
   }
 
   const renderField = (spec: FieldSpec): any => {
@@ -392,7 +413,7 @@ function MemorySettingsSection(props: { scope: any }): any {
         className: 'meowmm_set_input',
         type: 'text',
         value: text,
-        placeholder: spec.placeholder,
+        placeholder: placeholderOf(spec),
         disabled: !snap.writable,
         onChange: (e: any) => setDrafts((prev) => ({ ...prev, [draftKey(spec)]: e.target.value })),
         onBlur: (e: any) => {
@@ -413,8 +434,8 @@ function MemorySettingsSection(props: { scope: any }): any {
       el(
         'div',
         { className: 'meowmm_set_rowtext' },
-        el('span', { className: 'meowmm_set_label' }, spec.label),
-        spec.hint !== undefined ? el('span', { className: 'meowmm_set_hint' }, spec.hint) : null,
+        el('span', { className: 'meowmm_set_label' }, t(spec.label)),
+        spec.hint !== undefined ? el('span', { className: 'meowmm_set_hint' }, t(spec.hint)) : null,
         editingSuppress && parseSuppressWindows(suppressText!).error !== undefined
           ? el('span', { className: 'meowmm_set_err' }, parseSuppressWindows(suppressText!).error)
           : null,
@@ -423,8 +444,8 @@ function MemorySettingsSection(props: { scope: any }): any {
         'div',
         { className: 'meowmm_set_ctrl', style: { display: 'flex', gap: '8px', alignItems: 'center' } },
         control,
-        el('span', { className: `meowmm_set_badge ${overridden ? 'meowmm_set_badge_override' : 'meowmm_set_badge_prefill'}` }, overridden ? '已覆盖' : '默认'),
-        overridden && snap.writable ? el('button', { className: 'meowmm_set_reset', onClick: () => { clearDraft(spec); setSuppressText(null); void reset(spec) } }, '恢复默认') : null,
+        el('span', { className: `meowmm_set_badge ${overridden ? 'meowmm_set_badge_override' : 'meowmm_set_badge_prefill'}` }, t(overridden ? 'settings.badge.override' : 'settings.badge.default')),
+        overridden && snap.writable ? el('button', { className: 'meowmm_set_reset', onClick: () => { clearDraft(spec); setSuppressText(null); void reset(spec) } }, t('settings.reset')) : null,
       ),
     )
   }
@@ -432,20 +453,16 @@ function MemorySettingsSection(props: { scope: any }): any {
   return el(
     'div',
     { className: 'meowmm_set_page' },
-    el('h2', { className: 'meowmm_set_title' }, '喵记忆'),
-    el(
-      'p',
-      { className: 'meowmm_set_subtitle' },
-      '跨会话记忆插件的全部设置。改动保存在 DSH 设置里（字段级，「恢复默认」= 回到插件出厂默认，不受 patch 装配基线影响）；生效需要热重载/重启 meow-memory 插件。',
-    ),
-    !snap.writable ? el('span', { className: 'meowmm_set_muted' }, '当前连接为只读（设置写入仅限本机回环连接）。') : null,
-    savedAt > 0 ? el('span', { className: 'meowmm_set_saved' }, '已保存 ✓ 热重载/重启 meow-memory 插件后生效') : null,
+    el('h2', { className: 'meowmm_set_title' }, t('settings.title')),
+    el('p', { className: 'meowmm_set_subtitle' }, t('settings.summary')),
+    !snap.writable ? el('span', { className: 'meowmm_set_muted' }, t('settings.readonly')) : null,
+    savedAt > 0 ? el('span', { className: 'meowmm_set_saved' }, t('settings.saved')) : null,
     error !== null ? el('div', { className: 'meowmm_set_err' }, error) : null,
     ...FIELDS.map((group) =>
       el(
         'div',
         { key: group.title, className: 'meowmm_set_card' },
-        el('div', { className: 'meowmm_set_group' }, group.title),
+        el('div', { className: 'meowmm_set_group' }, t(group.title)),
         ...group.fields.map(renderField),
       ),
     ),
@@ -454,7 +471,7 @@ function MemorySettingsSection(props: { scope: any }): any {
 
 // ── 挂载 ────────────────────────────────────────────────────────────────────
 
-export function applySettingsPage(ctx: any): void {
+export function applySettingsPage(ctx: any): () => void {
   if (typeof document !== 'undefined' && document.querySelector(`style[data-plugin-css="${CSS_ID}"]`) === null) {
     const tag = document.createElement('style')
     tag.dataset.plugin = 'meow-memory-settings'
@@ -466,17 +483,36 @@ export function applySettingsPage(ctx: any): void {
   const scope = ctx.settingsScope.bind({ namespace: SETTINGS_NS })
 
   // 顶级分区（与「通用」「模型」「插件」平级）：list slot 契约 = id + order + label。
-  // label 直接返回中文（第三方 locale 字典在官方外壳没有席位——cachebilling 实测结论）。
-  ctx.slots.inject('settings.section', () =>
-    ctx.slots.register(
+  // label 是「注册者本地化」的文案：外壳不订阅 locale 状态，注册者要在语言切换时
+  // 用新文案重注册（官方契约原话），所以这里保存注册 disposer，语言一变就重注册。
+  let disposeEntry: (() => void) | null = null
+  const registerSection = (): void => {
+    disposeEntry?.()
+    disposeEntry = ctx.slots.register(
       {
         name: 'settings.section',
         id: SETTINGS_NS,
         order: 35,
-        label: () => '喵记忆',
+        label: () => t('settings.title'),
         inject: (): unknown => ({ scope }),
       },
       MemorySettingsSection,
-    ),
-  )
+    )
+  }
+  const disposeInjection = ctx.slots.inject('settings.section', registerSection)
+  const unsubscribeLocale = onUiLocaleChange(registerSection)
+
+  return () => {
+    unsubscribeLocale()
+    try {
+      disposeInjection()
+    } catch {
+      /* 清理失败不阻塞 */
+    }
+    try {
+      disposeEntry?.()
+    } catch {
+      /* 清理失败不阻塞 */
+    }
+  }
 }

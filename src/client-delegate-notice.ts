@@ -30,6 +30,11 @@
 
 import type { ConversationSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import { subscribeDreamEvents } from './client-dream-events.ts'
+import { registerUiReplayer } from './client-i18n-replay.ts'
+import { t } from './i18n/index.js'
+
+/** 测试接点：界面语言（生产代码读 DSH locale 服务）。 */
+export { setUiLocaleForTest, getUiLocale } from './i18n/index.js'
 
 /** delegate 打点文本标记（与 host 端 delegate.ts 逐字一致）。 */
 export const REFLECT_DELEGATE_MARKER = '【记忆反思标记】'
@@ -171,14 +176,15 @@ function dreamRunning(sessionId: string | undefined): boolean {
 void dreamRunning
 
 /** 气泡文案（猫猫拍板文案 + 折叠横条同款 ▸ 箭头）——纯映射，可单测。
- *  dream 的 interrupted 优先于 running（中断是终态观感，重试由 host 自动进行）。 */
+ *  dream 的 interrupted 优先于 running（中断是终态观感，重试由 host 自动进行）。
+ *  文案经 i18n 层（跟随 DSH 语言设置），判定逻辑不变。 */
 export function delegateNoticeLabelFor(variant: DelegateVariant, running: boolean, interrupted = false): string {
   if (variant === 'dream') {
-    if (interrupted) return '▸ 梦境记忆整理已中断，稍后自动重试。'
-    return running ? '▸ 梦境记忆整理任务进行中……' : '▸ 梦境记忆整理任务已完成。'
+    if (interrupted) return t('notice.dream.interrupted')
+    return running ? t('notice.dream.running') : t('notice.dream.done')
   }
-  if (variant === 'reflect-done') return '▸ 记忆反思任务已完成。'
-  return running ? '▸ 记忆反思任务进行中……' : '▸ 记忆反思任务已完成。'
+  if (variant === 'reflect-done') return t('notice.reflect.done')
+  return running ? t('notice.reflect.running') : t('notice.reflect.done')
 }
 
 /** 气泡文案：按打点的 running 状态渲染。 */
@@ -354,7 +360,11 @@ export function startDelegateStateSync(): () => void {
 
   void refresh()
 
+  // UI 语言切换后重放气泡文本（纯 DOM 写入，不随 React 重渲染更新）。
+  const unregisterReplay = registerUiReplayer(notify)
+
   return () => {
+    unregisterReplay()
     unsubscribeDreamEvents()
     dreamStateBySession.clear()
     lastApplied = []

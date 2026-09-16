@@ -28,6 +28,11 @@
 
 import { MOON_SVG, makeSkipMoonSvg, readSessionId } from './client-dream-icon.ts'
 import { subscribeDreamEvents } from './client-dream-events.ts'
+import { registerUiReplayer } from './client-i18n-replay.ts'
+import { t } from './i18n/index.js'
+
+/** 测试接点：界面语言（生产代码读 DSH locale 服务）。 */
+export { setUiLocaleForTest, getUiLocale } from './i18n/index.js'
 
 /** 注入项标记属性（清理与幂等锚点；data-meow-session-id 记录绑定会话）。 */
 export const SKIP_ITEM_ATTR = 'data-meow-skip-item'
@@ -50,9 +55,9 @@ export const MENU_OPEN_ROW_SEL = '[role="treeitem"][class*="_sessionRow"][class*
 /** 点击→菜单挂载的判定窗口（ms；仅作 menuOpen 锚点失效时的兜底）。 */
 const MENU_WINDOW_MS = 1500
 
-/** 菜单项文案（用户拍板：按一下翻转，再按恢复）。 */
+/** 菜单项文案（用户拍板：按一下翻转，再按恢复；文案经 i18n 层，跟随 DSH 语言设置）。 */
 export function skipLabel(skipped: boolean): string {
-  return skipped ? '取消跳过梦境整理记忆' : '跳过梦境整理记忆'
+  return skipped ? t('menu.unskipDream') : t('menu.skipDream')
 }
 
 /**
@@ -289,7 +294,16 @@ export function startDreamSkipManager(): () => void {
   observer.observe(document.body, { childList: true, subtree: true })
   void refresh()
 
+  // UI 语言切换后重放已开着的菜单项文案（纯 DOM 写入，不随 React 重渲染更新）。
+  const unregisterReplay = registerUiReplayer(() => {
+    for (const item of Array.from(document.querySelectorAll<HTMLElement>(`[${SKIP_ITEM_ATTR}]`))) {
+      const sid = item.getAttribute('data-meow-session-id')
+      if (sid !== null) retitleLeaf(item, skipLabel(readSkipped(sid)))
+    }
+  })
+
   return () => {
+    unregisterReplay()
     document.removeEventListener('pointerdown', onPointerDown, true)
     observer.disconnect()
     window.clearTimeout(observerTimer)

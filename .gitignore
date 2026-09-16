@@ -8,3 +8,5 @@ _diag*
 _diag-*
 Delete_*
 mytrashbin/
+/.dsh-meow
+/.npm-cache

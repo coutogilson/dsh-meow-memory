@@ -26,7 +26,8 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { t } from './i18n/index.js'
 
-/** 测试接点：界面语言（生产代码读 DSH locale 服务，勿在业务逻辑里调用这两个）。 */
+/** 测试接点（与 client-delegate-notice 的 setDreamStatesForTest 同款惯例）：界面
+ *  语言。生产代码只读 DSH locale 服务，唯一的写入入口在 i18n core 里。 */
 export { setUiLocaleForTest, getUiLocale } from './i18n/index.js'
 
 /** 反思轮识别标记（与 host 端 reflect.ts / dream.ts 保持一致）。 */

@@ -1,7 +1,7 @@
 # meow-memory 🐱📝
 
-| [中文](README.md) | [English](README.en.md) | [MIT License](LICENSE) |
-| :---: | :---: | :---: |
+| [中文](README.md) | [English](README.en.md) | [Português (BR)](README.pt-br.md) | [MIT License](LICENSE) |
+| :---: | :---: | :---: | :---: |
 
 Cross-session memory for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH).
 
@@ -213,6 +213,14 @@ All fields are optional (profile patch or `cordis.patch.yml`). **You don't have 
 The reflection turn and each dream group always run in the main window (steer) — prompts, replies, and tool calls land in the main session log (the fold UI keeps them tidy). The standalone fork-subagent execution mode was removed in v0.24; there is no longer an "independent execution" switch.
 
 To run memory work on a different (cheaper) model: with `delegate.model` set, every LLM request issued during reflection/dream turns gets its provider/model overridden via dsh's `agent/request` waterfall, and the main model takes over again once the turn ends — normal conversation and tool rounds are untouched. The implementation is stateless: each request is judged by whether the current turn carries a reflection/dream directive marker, so user aborts, crashes, and hot reloads can never leave a stuck "overridden" state.
+
+### UI language: follows the DSH locale (v0.27.0)
+
+The plugin's own UI copy (fold bars, delegate bubbles, session menu item, settings page) goes through a separate **UI copy layer** that follows DSH's Settings → General → Language: **中文 / English / Português (Brasil)** ship built in, and a switch applies immediately (the settings label re-registers per the official contract; plain DOM nodes are refreshed through a replay registry).
+
+It is a different layer from `promptLang` (model-facing copy) and the two do not interfere: the UI can follow the shell while injected prompts keep following `promptLang`. On old hosts (no locale service) it degrades to the browser language plus the built-in dictionaries, ending at `zh` — byte-for-byte the previous behaviour.
+
+Adding a community UI language: one dictionary file plus one line in `SUPPORTED_UI_LOCALES` (no UI code changes). See [`src/i18n/README.md`](src/i18n/README.md).
 
 ### promptLang: prompt & retrieval language (important)
 

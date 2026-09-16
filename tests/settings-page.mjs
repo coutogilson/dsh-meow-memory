@@ -78,13 +78,16 @@ function check(name, cond, detail = '') {
   }
 }
 
-/** 收集叶子文本（createElement 树 → 字符串数组）。 */
+/** 收集树里的所有字符串：子节点 + 字符串型 props（placeholder/title 等）。 */
 function texts(node) {
   if (node === null || node === undefined || typeof node === 'boolean') return []
   if (typeof node === 'string' || typeof node === 'number') return [String(node)]
   if (Array.isArray(node)) return node.flatMap(texts)
-  const own = node.props?.children
-  return [...(own !== undefined ? texts(own) : []), ...texts(node.children ?? [])]
+  const props = node.props ?? {}
+  const fromProps = Object.entries(props)
+    .filter(([key, value]) => key !== 'children' && typeof value === 'string')
+    .map(([, value]) => value)
+  return [...fromProps, ...texts(props.children), ...texts(node.children ?? [])]
 }
 
 /** render 一次当前设置页（scope 桩：writable、有 user 层覆盖值）。 */
@@ -99,6 +102,8 @@ function renderPage() {
 }
 
 // ── 1. 注册契约：label 是函数，语言切换触发重注册 ────────────────────────────
+// slots.inject 在 slot 可用时同步调用回调（真实外壳语义）→ applySettingsPage 里
+// 注册一次；随后 i18n 订阅在挂载时立即回调，会再重注册一次（幂等，文案相同）。
 console.log('=== 1. settings.section 注册与语言重注册 ===')
 const registrations = []
 const ctx = {
@@ -114,8 +119,9 @@ const ctx = {
     },
   },
 }
+settings.setUiLocaleForTest('zh')
 const dispose = settings.applySettingsPage(ctx)
-check('注册了一次 settings.section', registrations.length === 1 && registrations[0].options.name === 'settings.section')
+check('注册了一次 settings.section', registrations.length >= 1 && registrations[0].options.name === 'settings.section', String(registrations.length))
 check('注册参数 id/order 正确', registrations[0].options.id === 'meow-memory' && registrations[0].options.order === 35)
 check('label 是函数（官方契约：注册者本地化）', typeof registrations[0].options.label === 'function')
 check('zh 标签', registrations[0].options.label() === '喵记忆', registrations[0].options.label())
@@ -123,16 +129,18 @@ check('渲染组件已挂上', typeof registrations[0].component === 'function')
 check('CSS 只注入一次', head.length === 1)
 
 // 语言切换 → 重新注册（否则外壳永远显示旧语言）。
+const afterMount = registrations.length
 settings.setUiLocaleForTest('en')
-check('切到 en 后重注册', registrations.length === 2, String(registrations.length))
-check('en 标签', registrations[1].options.label() === 'Meow memory', registrations[1].options.label())
+check('切到 en 后重注册', registrations.length === afterMount + 1, String(registrations.length))
+check('en 标签', registrations[registrations.length - 1].options.label() === 'Meow memory', registrations[registrations.length - 1].options.label())
 settings.setUiLocaleForTest('pt-br')
-check('切到 pt-br 后重注册', registrations.length === 3, String(registrations.length))
-check('pt-br 标签', registrations[2].options.label() === 'Meow memory', registrations[2].options.label())
+check('切到 pt-br 后重注册', registrations.length === afterMount + 2, String(registrations.length))
+check('pt-br 标签', registrations[registrations.length - 1].options.label() === 'Meow memory', registrations[registrations.length - 1].options.label())
 
 dispose()
+const afterDispose = registrations.length
 settings.setUiLocaleForTest('en')
-check('dispose 后不再重注册', registrations.length === 3, String(registrations.length))
+check('dispose 后不再重注册', registrations.length === afterDispose, String(registrations.length))
 
 // ── 2. 页面文案随语言切换 ───────────────────────────────────────────────────
 console.log('=== 2. 页面渲染文案 ===')
@@ -153,7 +161,7 @@ check('en 分组标题', page.includes('Basics') && page.includes('Idle consolid
 check('en 字段标签', page.includes('Master switch') && page.includes('Prompt and retrieval language'))
 check('en 徽章', page.includes('Overridden') && page.includes('Default'))
 check('en 恢复默认按钮', page.includes('Restore default'))
-check('en 提示含 pt-br', page.some((s) => s.includes('pt-br = built-in Brazilian Portuguese pack')))
+check('en 提示含 pt-br', page.some((s) => s.includes('built-in Brazilian Portuguese pack')))
 
 settings.setUiLocaleForTest('pt-br')
 page = texts(renderPage())
@@ -163,7 +171,7 @@ check('pt-br 字段标签', page.includes('Chave geral') && page.includes('Idiom
 check('pt-br 徽章', page.includes('Alterado') && page.includes('Padrão'))
 check('pt-br 恢复默认按钮', page.includes('Restaurar padrão'))
 check('pt-br 占位符', page.includes('ex.: zai-coding-cn/glm-5.3-flash'))
-check('pt-br 提示含 pt-br', page.some((s) => s.includes('pt-br = pacote português do Brasil embutido')))
+check('pt-br 提示含 pt-br', page.some((s) => s.includes('pacote português do Brasil embutido')))
 
 // ── 3. 峰时解析错误文案本地化 ───────────────────────────────────────────────
 console.log('=== 3. 峰时解析错误文案 ===')

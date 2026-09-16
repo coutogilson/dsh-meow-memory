@@ -487,7 +487,11 @@ export function applySettingsPage(ctx: any): () => void {
   // 用新文案重注册（官方契约原话），所以这里保存注册 disposer，语言一变就重注册。
   let disposeEntry: (() => void) | null = null
   const registerSection = (): void => {
-    disposeEntry?.()
+    try {
+      disposeEntry?.()
+    } catch {
+      /* 旧条目已在卸载：继续注册新条目 */
+    }
     disposeEntry = ctx.slots.register(
       {
         name: 'settings.section',

@@ -1,7 +1,7 @@
 # meow-memory 🐱📝
 
-| [中文](README.md) | [English](README.en.md) | [MIT License](LICENSE) |
-| :---: | :---: | :---: |
+| [中文](README.md) | [English](README.en.md) | [Português (BR)](README.pt-br.md) | [MIT License](LICENSE) |
+| :---: | :---: | :---: | :---: |
 
 为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）打造的跨会话记忆插件。
 
@@ -182,6 +182,19 @@ dsh plugin --profile web remove meow-memory
 反思轮和 dream 各组始终在主窗口执行（steer）——prompt、模型回应、工具调用落在主会话 log（折叠 UI 负责视觉收纳）。独立 fork 子代理执行方式已于 v0.24 移除，不再提供"独立执行"开关。
 
 如果想让记忆整理换个（更便宜的）模型跑：配置 `delegate.model` 后，反思/梦境轮发起的每个 LLM 请求会经 dsh 的 `agent/request` waterfall 自动覆盖 provider/model，轮次结束自动换回主模型——正常对话、工具轮完全不受影响。实现是无状态的：按"当前 turn 是否携带反思/梦境指令标记"逐请求判定，用户中止、崩溃、热重载都不会留下"卡在换模型"的脏状态。
+
+### 界面语言：跟随 DSH 语言设置（v0.27.0）
+
+插件界面文案（折叠横条、打点气泡、会话菜单项、设置页）走独立的 **UI 文案层**，跟随
+DSH 的「设置 → 通用 → 语言」：内置 **中文 / English / Português (Brasil)** 三套字典，
+切换即时生效（设置页标签按官方契约重新注册，纯 DOM 节点经重放注册表刷新）。
+
+它与 `promptLang`（模型文案）是两层，互不影响：界面可以跟随外壳语言，而注入给模型的
+prompt 仍按 `promptLang` 走。老宿主（无 locale 服务）自动降级为浏览器语言 + 内置字典，
+最终落 `zh`——行为与外置前逐字不变。
+
+自定义 / 社区界面语言：加一个字典文件 + 在 `SUPPORTED_UI_LOCALES` 加一行（不改 UI 代码），
+详见 [`src/i18n/README.md`](src/i18n/README.md)。
 
 ### promptLang：prompt 与检索语言（重要）
 

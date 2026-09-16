@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.27.0 (unreleased)
+
+### 界面文案层：UI/UX 跟随 DSH 语言设置（zh / en / pt-br）
+
+- **问题**：界面文案（折叠横条、打点气泡、会话菜单项、设置页全部字段）硬编码中文，非中文用户看到的是中英混杂的界面——`promptLang` 只管模型文案，管不到 UI。
+- **分层**：界面文案与模型文案分家。新增 `src/i18n/`（UI 层，跟随 DSH 语言设置）与既有 `src/prompts/<lang>/`（模型层，跟随 `promptLang`）互不影响：界面可以跟随外壳切成英文/葡语，注入给模型的 prompt 仍按 `promptLang` 走。
+- **跟随 DSH**：`installI18n(ctx)` 经 `ctx.get('locale')` 探测 DSH 0.1.5+ 的 locale 服务（**不写进 `inject`**——写进去会让插件在无 locale 的老宿主/受限动态包上整体挂起），注册 `addLanguage({ id: 'pt-br', label: 'Português (Brasil)', fallback: 'en' })` 与三语字典；查表走服务自己的 fallback 链（pt-br 缺键自动落 en，绝不出现空串）。设置页标签按官方契约在语言切换时重新注册；纯 DOM 节点（横条/气泡/菜单项）经 `registerUiReplayer` 重放注册表刷新；设置页经 `onUiLocaleChange` 重渲染。
+- **降级**：无 locale 服务（老宿主 / 动态包）→ `navigator.languages` 判定 + 内置静态查表（zh → en），最终落 `zh`——与外置前逐字不变。语言/字典注册任何一步失败只告警，UI 退化不改插件行为。
+- **新增语言**：加一个字典文件 + `SUPPORTED_UI_LOCALES` 一行即可（`Record<UiKey, string>` 类型与测试卡住缺键/多余键），不改 UI 代码。文档见 `src/i18n/README.md`。
+- 文案键集 `zh` 侧逐字保留外置前的中文，中文用户视角是纯重构。
+
+### 文档
+
+- 新增 **`README.pt-br.md`**（葡萄牙语巴西版 README，与中文版逐节对应），三个 README 顶部语言切换表互相打通；`README.md` / `README.en.md` 补「界面语言」一节。
+- `src/i18n/README.md`：UI 文案层的架构、跟随 DSH locale 的接线、降级路径，以及「加一门语言 = 一个字典文件 + `SUPPORTED_UI_LOCALES` 一行」的贡献指南。
+
+### 测试
+
+- 新增 `tests/client-i18n.mjs`（61 项：三语键集/占位符一致、静态查表、语言订阅、DSH 服务接线含 fallback 链与幂等/降级、各模块三语输出、重放注册表）与 `tests/settings-page.mjs`（38 项：标签随语言重注册、页面渲染文案、峰时解析错误文案本地化）；`client-fold` / `client-dream-skip` / `client-delegate-notice` 补 en / pt-br 断言。主套件 405 + 全部 client 套件通过。
+
 ## v0.26.0 (2026-09-10)
 
 ### 反思/梦境任务独立成轮（dsh 0.1.5 工作汇报被折叠的根治）

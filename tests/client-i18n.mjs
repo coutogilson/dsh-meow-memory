@@ -5,16 +5,15 @@
  * 运行：node tests/client-i18n.mjs（内部 esbuild 现场打包源码，保证与 src 同步）。
  */
 import { build } from 'esbuild'
-import vm from 'node:vm'
 
 /**
- * 现场打包一个源文件为 ESM，并在独立的 vm 模块图里求值。
+ * 现场打包一个源文件为 ESM，返回其模块命名空间。
  *
- * 为什么不用 data: URL import：esbuild 对同一份输入返回同一模块实例，多次
- * bundleSrc('src/i18n/index.ts') 会共享模块级状态（语言注册表 / 订阅表），
- * 用例之间互相污染。vm.SourceTextModule 每次都是全新的模块图，语义与浏览器
- * 里「一份 bundle 一个实例」一致。
+ * 每次调用都用唯一的 query 后缀——否则 import(dataURL) 会命中模块缓存，多次
+ * bundleSrc('src/i18n/index.ts') 共享同一实例的模块级状态（语言注册表 / 订阅表），
+ * 用例之间互相污染。查询串让每个用例拿到独立实例，与「一份 bundle 一个实例」一致。
  */
+let bundleSeq = 0
 async function bundleSrc(entry) {
   const { outputFiles } = await build({
     entryPoints: [entry],
@@ -25,24 +24,9 @@ async function bundleSrc(entry) {
     logLevel: 'silent',
   })
   const code = new TextDecoder().decode(outputFiles[0].contents)
-  const context = vm.createContext({
-    console,
-    URL,
-    TextDecoder,
-    TextEncoder,
-    setTimeout,
-    clearTimeout,
-    setInterval,
-    clearInterval,
-    Buffer,
-    process,
-  })
-  const module = new vm.SourceTextModule(code, { context, identifier: entry })
-  await module.link(() => {
-    throw new Error(`unexpected import while linking ${entry}`)
-  })
-  await module.evaluate()
-  return module.namespace
+  bundleSeq++
+  const modUrl = `data:text/javascript;base64,${Buffer.from(code).toString('base64')}#${bundleSeq}`
+  return import(modUrl)
 }
 
 let passed = 0
@@ -153,6 +137,10 @@ function makeFakeService() {
       state.revision++
       return () => dicts.get(ns).delete(locale)
     },
+    /** 测试用：把某语言的字典换薄（模拟翻译未完成），验证 fallback 链。 */
+    thinDict: (ns, locale, dict) => {
+      dicts.get(ns).set(locale, dict)
+    },
     bind: (ns) => (key, params) => {
       const byLocale = dicts.get(ns)
       let template
@@ -184,15 +172,16 @@ service.setLocale('pt-br')
 check('切到 pt-br 后取葡语', t('menu.skipDream') === 'Pular a consolidação de memória (dream)')
 check('切语言触发订阅（UI 重放）', getUiLocale() === 'pt-br')
 
-// 服务缺键 → 走服务自己的 fallback 链（pt-br → en），而不是留空/键名。
+// 缺键时走服务自己的 fallback 链（pt-br → en）：安装后把某语言的字典换薄，验证
+// 查表确实经过服务，而不是落到我们的静态字典（静态字典永远是全量，掩盖缺失）。
 const thinService = makeFakeService()
-thinService.register('meow-memory', 'en', { 'menu.skipDream': 'EN ONLY' })
-thinService.register('meow-memory', 'pt-br', {})
-thinService.addLanguage({ id: 'pt-br', label: 'x', fallback: 'en' })
-thinService.state.active = 'pt-br'
 const thin = await bundleSrc('src/i18n/index.ts')
 thin.installI18n({ get: () => thinService })
-check('服务字典缺键落 en（fallback 链）', thin.t('menu.skipDream') === 'EN ONLY')
+thinService.setLocale('pt-br')
+thinService.thinDict('meow-memory', 'pt-br', { 'menu.skipDream': 'SÓ PT-BR' })
+check('服务字典有键时取服务值', thin.t('menu.skipDream') === 'SÓ PT-BR')
+thinService.thinDict('meow-memory', 'pt-br', {})
+check('服务字典缺键落 en（fallback 链）', thin.t('menu.skipDream') === 'Skip dream memory consolidation')
 
 // 重复 install 幂等：不再重复 addLanguage/register。
 const before = { add: service.calls.addLanguage.length, reg: service.calls.register.length }

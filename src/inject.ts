@@ -13,7 +13,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { Doc } from './bm25.js'
 import { keywordHitScore, search, tokenize } from './bm25.js'
-import { isGlobalProject, memoryDbPath, projectCovers, projectLabel, relativeTime, PROJECT_SUBCATEGORIES, type MemoryDb, type MemoryRow, type ProjectSubcategory } from './db.js'
+import { isGlobalProject, isGlobalScope, memoryDbPath, projectCovers, projectLabel, relativeTime, PROJECT_SUBCATEGORIES, type MemoryDb, type MemoryRow, type ProjectSubcategory } from './db.js'
 import { fillTemplate, keyedValue } from './prompt-loader.js'
 
 export interface InjectOptions {
@@ -268,8 +268,11 @@ function buildInjectionBody(
   pushEntries(lbl('inject.aboutYou'), soul)
   pushEntries(lbl('inject.aboutUser'), user)
 
-  // 设计原则（rules）：只注入「全局（project 为空）且 importance≥2」的——少而精的命令式准则。
-  const globalRules = db.list('rules', { status: 'active' }).filter((r) => r.project === null && r.importance >= 2)
+  // 设计原则（rules）：注入「全局适用（未标记 null / 空串 / 全局标记「全局」「global」）
+  // 且 importance≥2」的——少而精的命令式准则。
+  // 2026-09-19 口径修复（用户拍板）：此前只认 project === null，而文档（tools.md /
+  // system-guide.md / dream-atomic.md）教模型写"全局"——按文档写的准则反而永不注入。
+  const globalRules = db.list('rules', { status: 'active' }).filter((r) => isGlobalScope(r.project) && r.importance >= 2)
   pushEntries(lbl('inject.rules'), globalRules)
 
   // 记忆导引：说明 + 项目列表（正文/标题一律自取，不列）。
@@ -536,7 +539,7 @@ function hitQuery(
     ...db.list('rules', { status: 'active' }),
     ...db.list('topic', { status: 'active' }),
   ].filter((r) =>
-    (r.project === null || isGlobalProject(r.project) || (currentProject !== null && projectCovers(r.project, currentProject)))
+    (isGlobalScope(r.project) || (currentProject !== null && projectCovers(r.project, currentProject)))
     && r.source_session !== sessionId, // 本 session 建立的记忆在上下文里，不命中
   )
   if (hitRows.length === 0) return []

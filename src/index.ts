@@ -749,7 +749,7 @@ async function applyInner(ctx: Context, config: unknown): Promise<void> {
     if (decision === undefined || decision.kind !== 'enter' || signal.aborted) return decision
     if (decision.messages.length === 0) return decision
     // 子代理不注入（origin === 'subagent'，dsh 权威标记）：它们的 prompt 由父代理提供
-    // （如 dsh-femwa 的角色上下文）。注意不能只看 parentSession——GUI fork/续写的
+    // （如 dsh-femo 的角色上下文）。注意不能只看 parentSession——GUI fork/续写的
     // 主会话也有 parentSession（真机踩坑 2026-08-17：fca10feb 被误判为子代理导致注入全失效）。
     if (agent.session.header.origin === 'subagent') return decision
     registerLiveAgent(agent)
@@ -1259,7 +1259,7 @@ function persistWindowIndex(): void {
 export { PLUGIN_SOURCE, REFLECT_MARKER }
 export { parseModelSpec, REFLECT_DELEGATE_MARKER, REFLECT_DONE_DELEGATE_MARKER, DREAM_DELEGATE_MARKER } from './delegate.js'
 export { collectDreamStates, headerOf, type PersistedSessionLike } from './dream-signal.js'
-export { MemoryDb, memoryDbPath, getDb, closeAllDbs, LEVELS, newId, PROJECT_SUBCATEGORIES, projectList, projectCovers, projectLabel, relativeTime, isGlobalProject, globalProjectMarker, GLOBAL_PROJECT_CANON } from './db.js'
+export { MemoryDb, memoryDbPath, getDb, closeAllDbs, LEVELS, newId, PROJECT_SUBCATEGORIES, projectList, projectCovers, projectLabel, relativeTime, isGlobalProject, isGlobalScope, globalProjectMarker, GLOBAL_PROJECT_CANON, GLOBAL_PROJECT_CANON_EN } from './db.js'
 export { migrateLegacy } from './migrate.js'
 export { buildHitInjection, buildInjection, buildReinjection, buildProjectSectionText, readSeen, markSearched, markAccessed, readInjected, markInjected, markProjectQueried, readProjectQueried, markWritten, readWritten, markReinjectPending, clearReinjectPending, isReinjectPending, MAX_REINJECT_PROJECTS, MAX_REINJECT_WRITTEN, sessionsFile, getCurrentProject, setCurrentProject, releaseSeen } from './inject.js'
 export { buildReflectMessage, consecutiveToolSteps, scanTurn } from './reflect.js'

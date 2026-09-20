@@ -33,6 +33,7 @@ import {
   projectLabel,
   projectList,
   isGlobalProject,
+  isGlobalScope,
   globalProjectMarker,
   relativeTime,
   collectDreamRounds,
@@ -79,7 +80,7 @@ const db = new MemoryDb(memoryDbPath(ws))
 const s1 = db.insert({ level: 'soul', content: '我是用户的长期协作伙伴，重事实轻客套。', importance: 3 })
 check('soul insert uuid', s1.id.length === 36)
 db.insert({ level: 'user', content: '用户偏好中文交流，先备份再改代码。' })
-db.insert({ level: 'project', content: 'femGen 集成 dsh 插件的设计定稿', project: 'femwa', title: 'femGen 集成' })
+db.insert({ level: 'project', content: 'femGen 集成 dsh 插件的设计定稿', project: 'femo', title: 'femGen 集成' })
 db.insert({ level: 'fact', content: 'Node v22 自带 node:sqlite 可用', project: 'dsh' })
 db.insert({ level: 'lesson', content: '每轮注入没意义，模型能看见上下文', corrected: 1 })
 db.insert({ level: 'topic', content: '【起因】重构记忆插件【经过】设计讨论【结果】未定', title: 'meow-memory 重构', goal: '让记忆插件 v2 上线' })
@@ -89,7 +90,7 @@ const found = db.findById(s1.id)
 check('findById cross-table', found?.level === 'soul' && found.row.content.includes('长期协作'))
 check('lesson corrected flag', db.list('lesson')[0].corrected === 1)
 check('topic goal stored', db.list('topic')[0].goal === '让记忆插件 v2 上线')
-check('project name stored', db.list('project')[0].project === 'femwa')
+check('project name stored', db.list('project')[0].project === 'femo')
 check('update status', db.update('topic', db.list('topic')[0].id, { status: 'stale' }) &&
   db.list('topic', { status: 'stale' }).length === 1)
 check('findById miss', db.findById('nope') === undefined)
@@ -104,13 +105,13 @@ check('newId time-prefixed', /^[0-9a-z]{9}-/.test(newId()) && newId().length ===
 const early = newId(Date.now() - 1000)
 const late = newId(Date.now())
 check('newId order = creation order', early < late)
-const p1 = db.insert({ level: 'project', content: '项目目标概述', project: 'femwa', subcategory: 'overview' })
+const p1 = db.insert({ level: 'project', content: '项目目标概述', project: 'femo', subcategory: 'overview' })
 check('subcategory stored', db.findById(p1.id)?.row.subcategory === 'overview')
 check('updated_at default now', db.findById(p1.id)?.row.updated_at !== null)
 const beforeUp = db.findById(p1.id)?.row.updated_at ?? 0
 db.update('project', p1.id, { importance: 2 })
 check('update refreshes updated_at', (db.findById(p1.id)?.row.updated_at ?? 0) >= beforeUp)
-const todo = db.insert({ level: 'project', content: '待办事项', project: 'femwa', subcategory: 'todo' })
+const todo = db.insert({ level: 'project', content: '待办事项', project: 'femo', subcategory: 'todo' })
 db.update('project', todo.id, { status: 'stale' })
 check('todo stale NOT in active list', db.list('project', { status: 'active' }).some((r) => r.id === todo.id) === false)
 check('todo stale IS searchable (done)', db.listSearchable('project').some((r) => r.id === todo.id))
@@ -133,7 +134,7 @@ const dreamCols = dbUp2.db.prepare('PRAGMA table_info(fact)').all().map((c) => c
 check('dream_at column dropped', !dreamCols.includes('dream_at'))
 const tcols = dbUp2.db.prepare('PRAGMA table_info(topic)').all().map((c) => c.name)
 check('topic.project column added', tcols.includes('project'))
-check('topic insert with project', dbUp2.insert({ level: 'topic', content: '话题', title: 't', project: 'femwa' }).project === 'femwa')
+check('topic insert with project', dbUp2.insert({ level: 'topic', content: '话题', title: 't', project: 'femo' }).project === 'femo')
 dbUp2.close()
 
 // windows 表
@@ -339,19 +340,19 @@ dbD.insert({ level: 'lesson', content: '坑1', project: 'dsh', source_session: w
 dbD.insert({ level: 'fact', content: '事实1', project: 'dsh', source_session: wid, created_at: 200, keywords: ['事实', '测试'] })
 dbD.insert({ level: 'topic', content: '话题内容', title: '话题X', project: 'dsh', source_session: wid, created_at: 150 })
 dbD.insert({ level: 'fact', content: '无项目事实', source_session: wid, created_at: 400 })
-dbD.insert({ level: 'project', content: '其他项目条目', project: 'femwa', source_session: wid, created_at: 50 })
+dbD.insert({ level: 'project', content: '其他项目条目', project: 'femo', source_session: wid, created_at: 50 })
 dbD.insert({ level: 'soul', content: 'soul 条目', source_session: wid, created_at: 1 })
 dbD.insert({ level: 'user', content: 'user 条目', source_session: wid, created_at: 2 })
 dbD.insert({ level: 'rules', content: '项目规则', project: 'dsh', source_session: wid, created_at: 350 })
 // 其他窗口建立、本窗口提取过的 → 应纳入；本窗口没提取过的其他窗口记忆 → 不应出现
 const otherFact = dbD.insert({ level: 'fact', content: '提取过的事实', project: 'dsh', source_session: 'win-other', created_at: 500 })
-const otherTopic = dbD.insert({ level: 'topic', content: '提取过的话题', title: '外来话题', project: 'femwa', source_session: 'win-other', created_at: 600 })
+const otherTopic = dbD.insert({ level: 'topic', content: '提取过的话题', title: '外来话题', project: 'femo', source_session: 'win-other', created_at: 600 })
 dbD.insert({ level: 'fact', content: '没提取过的', project: 'meow-eyes', source_session: 'win-other2', created_at: 700 })
 markInjected(wsD, wid, [otherFact.id, otherTopic.id], '.dsh-meow') // 模拟本窗口提取记录（injected）
 const rounds = collectDreamRounds(dbD, wid, wsD, '.dsh-meow')
 check('dream rounds: 3 (atomic + topic + project-summary)', rounds.length === 3 && rounds[0].kind === 'atomic' && rounds[1].kind === 'topic' && rounds[2].kind === 'project-summary', `got ${JSON.stringify(rounds.map((r) => r.kind))}`)
-check('project-summary round lists window projects sorted', JSON.stringify(rounds[2].projects) === JSON.stringify(['dsh', 'femwa']), `got ${JSON.stringify(rounds[2].projects)}`)
-check('atomic groups: dsh, femwa, unlabeled last', rounds[0].groups.map((g) => g.name).join(',') === 'dsh,femwa,', `got ${rounds[0].groups.map((g) => g.name).join(',')}`)
+check('project-summary round lists window projects sorted', JSON.stringify(rounds[2].projects) === JSON.stringify(['dsh', 'femo']), `got ${JSON.stringify(rounds[2].projects)}`)
+check('atomic groups: dsh, femo, unlabeled last', rounds[0].groups.map((g) => g.name).join(',') === 'dsh,femo,', `got ${rounds[0].groups.map((g) => g.name).join(',')}`)
 const dshGroup = rounds[0].groups.find((g) => g.name === 'dsh')
 check('atomic level order project→fact→lesson→rules', dshGroup !== undefined && dshGroup.rows.map((r) => r.level).join(',') === 'project,fact,fact,lesson,rules')
 check('atomic time order within level', dshGroup !== undefined && dshGroup.rows.filter((r) => r.level === 'fact').map((r) => r.content).join(',') === '事实1,提取过的事实')
@@ -362,7 +363,7 @@ check('topic round: only topic, own + seen included', rounds[1].groups.every((g)
 const dreamMsg0 = buildDreamMessage(dbD, wid, 5000, rounds, 0)
 const d0 = dreamMsg0.content.map((b) => (b.type === 'text' ? b.text : '')).join('')
 check('dream round0 marker + title', d0.includes('[meow-memory-dream]') && d0.includes('第 1/3 组 - 原子记忆条目'))
-check('dream round0 project headings', d0.includes('【project：dsh】') && d0.includes('【project：femwa】') && d0.includes('【project：无项目 - 全局信息，或缺少项目标签】'))
+check('dream round0 project headings', d0.includes('【project：dsh】') && d0.includes('【project：femo】') && d0.includes('【project：无项目 - 全局信息，或缺少项目标签】'))
 check('dream round0 T label + timestamp rule', d0.includes('本窗口记忆封存时间戳：1970-01-01 00:00') && d0.includes('时间戳规则') && d0.includes('**最后更新**'))
 check('dream round0 judgement + rules', d0.includes('如何判断该更新') && d0.includes('project标签是否准确') && d0.includes('importance') && d0.includes('拆分成多条') && d0.includes('本组整理完成'))
 check('dream round0 row full id + absolute timestamps', /\[fact [a-z0-9]{9}-[a-z0-9]{26} \d{4}-\d{2}-\d{2} \d{2}:\d{2}\]/.test(d0))
@@ -390,7 +391,7 @@ check('dream round1 has topic rows, no atomic', d1.includes('话题X') && d1.inc
 // 第 3 轮=项目总结（用户拍板 2026-08-22）：不带条目列表，AI 自己调 memory_project 复查并精简
 const dreamMsg2 = buildDreamMessage(dbD, wid, 5000, rounds, 2)
 const d2 = dreamMsg2.content.map((b) => (b.type === 'text' ? b.text : '')).join('')
-check('dream round2 summary title + projects', d2.includes('第 3/3 组 - 项目总结') && d2.includes('本组涉及的项目：dsh、femwa'))
+check('dream round2 summary title + projects', d2.includes('第 3/3 组 - 项目总结') && d2.includes('本组涉及的项目：dsh、femo'))
 check('dream round2 memory_project flow + rules', d2.includes('请再次使用 memory_project 工具') && d2.includes('长期记忆') && d2.includes('每一条里面只讲一个要点') && d2.includes('已被你的新总结取代') && d2.includes('status=archived') && d2.includes('本组整理完成'))
 check('dream round2 has no entry list', !d2.includes('【本组记忆】') && !d2.includes('事实1'))
 dbD.close()
@@ -608,7 +609,7 @@ const legacy = [
   '',
   '> 说明头',
   '',
-  '**用户 GitHub：Phant0Meow，就是 FemWA 作者本人（meow@example.com）**',
+  '**用户 GitHub：Phant0Meow，就是 femo 作者本人（meow@example.com）**',
   '作为长期协作伙伴，我应该重事实轻客套，先计划后动手。',
   '',
   '## 重要事实与决定 (fact)',
@@ -637,7 +638,7 @@ check('core ai line → soul', db2.list('soul').length === 1 && db2.list('soul')
 check('core user info → user', db2.list('user').some((u) => u.content.includes('Phant0Meow')))
 check('preference → user', db2.list('user').some((u) => u.content.includes('先备份')))
 check('mistake → lesson corrected', db2.list('lesson').length === 1 && db2.list('lesson')[0].corrected === 1)
-check('user_said → project femwa', db2.list('project').some((p) => p.project === 'femwa' && p.content.includes('femGen')))
+check('user_said → project femo', db2.list('project').some((p) => p.project === 'femo' && p.content.includes('femGen')))
 check('detail → project dsh', db2.list('project').some((p) => p.project === 'dsh' && p.content.includes('subagents')))
 check('plain fact → fact', db2.list('fact').length === 2 && db2.list('fact').some((f) => f.content.includes('3081')))
 check('migrate idempotent', migrateLegacy(db2, ws2) === null)
@@ -649,7 +650,7 @@ db2.insert({ level: 'soul', content: '我是用户的长期协作伙伴。', cre
 // listProjectNames：四表 project 列并集（只挂 fact 的项目名也出现）
 db2.insert({ level: 'fact', content: '猫眼视觉服务', project: 'meow-eyes', created_at: Date.now() })
 check('project names union includes fact-only project', db2.listProjectNames().includes('meow-eyes'))
-check('project names sorted', JSON.stringify(db2.listProjectNames()) === JSON.stringify(['dsh', 'femwa', 'meow-eyes']))
+check('project names sorted', JSON.stringify(db2.listProjectNames()) === JSON.stringify(['dsh', 'femo', 'meow-eyes']))
 db2.insert({ level: 'fact', content: '全局标记条目', project: '全局', created_at: Date.now() })
 check('project names exclude 全局 marker', !db2.listProjectNames().includes('全局'))
 db2.insert({ level: 'fact', content: '多项目条目', project: 'meow-fold,meow-smooth', created_at: Date.now() })
@@ -741,9 +742,9 @@ check('search note hints chat log', searchResult.note.includes('如果你确实�
 check('search hits carry real updated_at', searchResult.hits.every((h) => h.updated_at > 0))
 // search project/status 逗号多选（OR 语义）
 db.insert({ level: 'fact', content: '多选测试甲 独特内容', project: 'dsh', created_at: Date.now() })
-db.insert({ level: 'fact', content: '多选测试乙 独特内容', project: 'femwa', created_at: Date.now() })
-const sMulti = await searchTool.execute({ query: '多选测试', project: 'dsh,femwa' }, execCtx)
-check('search project multi-select OR', sMulti.hits.some((h) => h.project === 'dsh') && sMulti.hits.some((h) => h.project === 'femwa'))
+db.insert({ level: 'fact', content: '多选测试乙 独特内容', project: 'femo', created_at: Date.now() })
+const sMulti = await searchTool.execute({ query: '多选测试', project: 'dsh,femo' }, execCtx)
+check('search project multi-select OR', sMulti.hits.some((h) => h.project === 'dsh') && sMulti.hits.some((h) => h.project === 'femo'))
 const sSingle = await searchTool.execute({ query: '多选测试', project: 'dsh' }, execCtx)
 check('search project single filter', sSingle.hits.every((h) => h.project === 'dsh' || h.project === '全局' || h.project === null || h.project === ''))
 const sStatus = await searchTool.execute({ query: '多选测试', status: 'archived,stale' }, execCtx)
@@ -802,12 +803,15 @@ const up5 = await updateTool.execute({ id: kwId.slice(0, 8), importance: 5 }, up
 check('update importance unbounded (no clamp)', up5.ok === true && db.findById(kwId).row.importance === 5)
 
 // project 多值（逗号分隔）：包含判断 / 显示标签
-check('projectCovers multi-value includes', projectCovers('dsh,femwa', 'femwa') === true && projectCovers('dsh,femwa', 'meow-eyes') === false)
+check('projectCovers multi-value includes', projectCovers('dsh,femo', 'femo') === true && projectCovers('dsh,femo', 'meow-eyes') === false)
 check('projectCovers global/null covers all', projectCovers('全局', 'dsh') === true && projectCovers(null, 'dsh') === true)
-check('projectLabel multi-value/global/unmarked', projectLabel('dsh,femwa') === 'dsh/femwa' && projectLabel('全局') === '全局' && projectLabel(null) === '未标记')
+check('projectLabel multi-value/global/unmarked', projectLabel('dsh,femo') === 'dsh/femo' && projectLabel('全局') === '全局' && projectLabel(null) === '未标记')
 
 // 全局标记随语言包（labels.md 的 project.global）：英文包里模型写的是 "global"
-check('global marker: zh pack', globalProjectMarker() === '全局' && isGlobalProject('全局') && !isGlobalProject('global'))
+// 2026-09-19 口径修复（用户拍板）：全局 / global / null 三者都算全局——zh 包下也认 "global"
+check('global marker: zh pack', globalProjectMarker() === '全局' && isGlobalProject('全局') && isGlobalProject('global'))
+check('global scope: 未标记/空串/全局/global 都算全局适用', isGlobalScope(null) && isGlobalScope('') && isGlobalScope('  ')
+  && isGlobalScope('全局') && isGlobalScope('global') && !isGlobalScope('femo'))
 check('global marker: en pack recognizes its own word', (() => {
   setPromptLang('en')
   try { return globalProjectMarker() === 'global' && isGlobalProject('global') } finally { setPromptLang('zh') }
@@ -826,7 +830,7 @@ check('global marker: en global is not a project name', (() => {
 })())
 check('global marker: real project names untouched under en', (() => {
   setPromptLang('en')
-  try { return projectList('dsh, femwa').join('|') === 'dsh|femwa' && !projectCovers('dsh', 'femwa') } finally { setPromptLang('zh') }
+  try { return projectList('dsh, femo').join('|') === 'dsh|femo' && !projectCovers('dsh', 'femo') } finally { setPromptLang('zh') }
 })())
 
 // 注入正文里的框架词（labels.md）：zh 输出与外置前逐字节一致，en 走英文包
@@ -874,13 +878,13 @@ const wsReinj = mkdtempSync(join(tmpdir(), 'mm-reinj-'))
 const dbReinj = new MemoryDb(memoryDbPath(wsReinj))
 dbReinj.insert({ level: 'soul', content: '重注入测试 soul 条目' })
 dbReinj.insert({ level: 'user', content: '重注入测试 user 条目' })
-dbReinj.insert({ level: 'project', content: 'femwa 项目重注入全景条目', project: 'femwa', subcategory: 'overview' })
+dbReinj.insert({ level: 'project', content: 'femo 项目重注入全景条目', project: 'femo', subcategory: 'overview' })
 const reinjProjectTool = tools.find((t) => t.name === 'memory_project')
 const reinjProjCtx = { agent: { session: { header: { cwd: wsReinj, id: 's-reinj' } } } }
-await reinjProjectTool.execute({ project: 'femwa' }, reinjProjCtx)
-check('memory_project records projectsQueried', JSON.stringify(readProjectQueried(wsReinj, 's-reinj', '.dsh-meow')) === JSON.stringify(['femwa']))
+await reinjProjectTool.execute({ project: 'femo' }, reinjProjCtx)
+check('memory_project records projectsQueried', JSON.stringify(readProjectQueried(wsReinj, 's-reinj', '.dsh-meow')) === JSON.stringify(['femo']))
 await reinjProjectTool.execute({ project: '全局' }, reinjProjCtx)
-check('memory_project 全局 not recorded', JSON.stringify(readProjectQueried(wsReinj, 's-reinj', '.dsh-meow')) === JSON.stringify(['femwa']))
+check('memory_project 全局 not recorded', JSON.stringify(readProjectQueried(wsReinj, 's-reinj', '.dsh-meow')) === JSON.stringify(['femo']))
 // markProjectQueried：多项目拆分 / 去重最近优先 / 上限淘汰 / 全局过滤
 markProjectQueried(wsReinj, 's-lru', 'x, y', '.dsh-meow')
 check('markProjectQueried splits multi-project param', JSON.stringify(readProjectQueried(wsReinj, 's-lru', '.dsh-meow')) === JSON.stringify(['x', 'y']))
@@ -903,7 +907,7 @@ dbReinjNull.close()
 await handlers['session/event']({ id: 's-reinj', header: { cwd: wsReinj } }, { type: 'compaction/summary', time: Date.now() })
 await handlers['session/event']({ id: 's-reinj', header: { cwd: wsReinj } }, { type: 'compaction/end', time: Date.now(), data: { compactionId: 'c1', turn: null } })
 check('compaction/end success arms reinjection', isReinjectPending(wsReinj, 's-reinj', '.dsh-meow') === true)
-check('releaseSeen keeps projectsQueried for reinjection', JSON.stringify(readProjectQueried(wsReinj, 's-reinj', '.dsh-meow')) === JSON.stringify(['femwa']))
+check('releaseSeen keeps projectsQueried for reinjection', JSON.stringify(readProjectQueried(wsReinj, 's-reinj', '.dsh-meow')) === JSON.stringify(['femo']))
 await handlers['session/event']({ id: 's-reinj2', header: { cwd: wsReinj } }, { type: 'compaction/end', time: Date.now(), data: { compactionId: 'c2', turn: null, error: 'provider failed' } })
 check('compaction/end with error does not arm', isReinjectPending(wsReinj, 's-reinj2', '.dsh-meow') === false)
 
@@ -913,9 +917,9 @@ const dbWritten = new MemoryDb(memoryDbPath(wsWritten))
 const rememberToolW = tools.find((t) => t.name === 'memory_remember')
 const updateToolW = tools.find((t) => t.name === 'memory_update')
 const writtenCtx = { agent: { session: { header: { cwd: wsWritten, id: 's-w' } } } }
-const r1 = await rememberToolW.execute({ content: '本会话新建的记忆条目', project: 'femwa', keywords: ['新建', '记忆', '测试', '压缩', '重注入', '回放', '痕迹', '条目'], importance: 1 }, writtenCtx)
+const r1 = await rememberToolW.execute({ content: '本会话新建的记忆条目', project: 'femo', keywords: ['新建', '记忆', '测试', '压缩', '重注入', '回放', '痕迹', '条目'], importance: 1 }, writtenCtx)
 check('remember insert records written', readWritten(wsWritten, 's-w', '.dsh-meow').includes(r1.id))
-const r2 = await rememberToolW.execute({ content: '本会话新建的记忆条目', project: 'femwa', keywords: ['新建', '记忆', '测试', '压缩', '重注入', '回放', '痕迹', '条目'], importance: 2 }, writtenCtx)
+const r2 = await rememberToolW.execute({ content: '本会话新建的记忆条目', project: 'femo', keywords: ['新建', '记忆', '测试', '压缩', '重注入', '回放', '痕迹', '条目'], importance: 2 }, writtenCtx)
 check('remember merge records written', r2.merged === true && r2.id === r1.id && readWritten(wsWritten, 's-w', '.dsh-meow').includes(r2.id))
 const r3 = await updateToolW.execute({ id: r1.id, importance: 3 }, writtenCtx)
 check('update success records written', r3.ok === true && readWritten(wsWritten, 's-w', '.dsh-meow').includes(r1.id))
@@ -938,15 +942,15 @@ const wsW3 = mkdtempSync(join(tmpdir(), 'mm-reinj-written-'))
 const dbW3 = new MemoryDb(memoryDbPath(wsW3))
 dbW3.insert({ level: 'soul', content: 'W3 快照 soul 条目' })
 const wSoul = dbW3.insert({ level: 'soul', content: 'W3 快照与本块重复的 soul 条目' })
-const wSelf = dbW3.insert({ level: 'fact', content: '本会话自己存的 fact 原文', project: 'femwa', source_session: 's-w3' })
+const wSelf = dbW3.insert({ level: 'fact', content: '本会话自己存的 fact 原文', project: 'femo', source_session: 's-w3' })
 const wOther = dbW3.insert({ level: 'lesson', content: '别的窗口建、本会话更新的 lesson 原文', source_session: 's-other' })
 const wArch = dbW3.insert({ level: 'fact', content: '本会话存了又归档的条目', source_session: 's-w3' })
 dbW3.update(wArch.level, wArch.id, { status: 'archived' })
-const wProj = dbW3.insert({ level: 'project', content: 'W3 全景里会出现的 project 条目', project: 'femwa', subcategory: 'overview' })
+const wProj = dbW3.insert({ level: 'project', content: 'W3 全景里会出现的 project 条目', project: 'femo', subcategory: 'overview' })
 const wFresh = dbW3.insert({ level: 'fact', content: '写入时的旧原文', source_session: 's-w3' })
 markWritten(wsW3, 's-w3', [wSelf.id, wOther.id, wArch.id, wProj.id, wSoul.id, wFresh.id], '.dsh-meow')
 dbW3.update('fact', wFresh.id, { content: '更新后的最新原文' })
-const w3Reinj = buildReinjection(dbW3, wsW3, 's-w3', ['femwa'], {}, '.dsh-meow')
+const w3Reinj = buildReinjection(dbW3, wsW3, 's-w3', ['femo'], {}, '.dsh-meow')
 const countOccurrences = (s, sub) => s.split(sub).length - 1
 check('reinjection includes written section', w3Reinj !== null && w3Reinj.text.includes('【本会话写过的记忆】'))
 check('written replays session-created entry', w3Reinj.text.includes('本会话自己存的 fact 原文'))
@@ -980,19 +984,19 @@ check('user message touches window', getDb(wsWin, '.dsh-meow').getWindow('s-win'
 const projectTool = tools.find((t) => t.name === 'memory_project')
 const projCtx = { agent: { session: { header: { cwd: ws, id: 't-proj' } } } }
 const t0 = Date.now()
-db.insert({ level: 'project', content: 'overview 旧条目', project: 'femwa', subcategory: 'overview', updated_at: t0 })
-db.insert({ level: 'project', content: 'overview 新条目', project: 'femwa', subcategory: 'overview', updated_at: t0 + 1000 })
-db.insert({ level: 'project', content: '决策条目', project: 'femwa', subcategory: 'decisions' })
-db.insert({ level: 'project', content: 'todo 进行中 A', project: 'femwa', subcategory: 'todo' })
-db.insert({ level: 'project', content: 'todo 进行中 B', project: 'femwa', subcategory: 'todo' })
-db.insert({ level: 'project', content: 'todo 无时间戳已完成', project: 'femwa', subcategory: 'todo', status: 'stale' })
+db.insert({ level: 'project', content: 'overview 旧条目', project: 'femo', subcategory: 'overview', updated_at: t0 })
+db.insert({ level: 'project', content: 'overview 新条目', project: 'femo', subcategory: 'overview', updated_at: t0 + 1000 })
+db.insert({ level: 'project', content: '决策条目', project: 'femo', subcategory: 'decisions' })
+db.insert({ level: 'project', content: 'todo 进行中 A', project: 'femo', subcategory: 'todo' })
+db.insert({ level: 'project', content: 'todo 进行中 B', project: 'femo', subcategory: 'todo' })
+db.insert({ level: 'project', content: 'todo 无时间戳已完成', project: 'femo', subcategory: 'todo', status: 'stale' })
 for (let i = 1; i <= 7; i++) {
-  db.insert({ level: 'project', content: `已完成事项 ${i}`, project: 'femwa', subcategory: 'todo', status: 'stale', updated_at: t0 + i * 1000 })
+  db.insert({ level: 'project', content: `已完成事项 ${i}`, project: 'femo', subcategory: 'todo', status: 'stale', updated_at: t0 + i * 1000 })
 }
-db.insert({ level: 'project', content: '已归档条目', project: 'femwa', subcategory: 'overview', status: 'archived' })
-const pj = await projectTool.execute({ project: 'femwa' }, projCtx)
-check('project 段落含项目名', pj.text.startsWith('【项目：femwa】'))
-check('project rows carry full id + absolute timestamp + content line', /\[femwa : project\] \[[a-z0-9]{9}-[a-z0-9]{26}\] \d{4}-\d{2}-\d{2} \d{2}:\d{2} \[.+\]\noverview 旧条目/.test(pj.text))
+db.insert({ level: 'project', content: '已归档条目', project: 'femo', subcategory: 'overview', status: 'archived' })
+const pj = await projectTool.execute({ project: 'femo' }, projCtx)
+check('project 段落含项目名', pj.text.startsWith('【项目：femo】'))
+check('project rows carry full id + absolute timestamp + content line', /\[femo : project\] \[[a-z0-9]{9}-[a-z0-9]{26}\] \d{4}-\d{2}-\d{2} \d{2}:\d{2} \[.+\]\noverview 旧条目/.test(pj.text))
 check('project 分组标题齐全', pj.text.includes('项目概述') && pj.text.includes('技术决策') && pj.text.includes('项目进度'))
 check('project overview 旧→新排序', pj.text.indexOf('overview 旧条目') < pj.text.indexOf('overview 新条目'))
 check('project archived 排除', !pj.text.includes('已归档条目'))
@@ -1007,13 +1011,21 @@ check('project 空项目提示', pjEmpty.text.includes('暂无记忆条目'))
 // rules 层：全局高 importance 注入首轮、其余检索/项目段落
 db.insert({ level: 'rules', content: '全局铁律：绝不删除文件只标 archived', project: null, importance: 2 })
 db.insert({ level: 'rules', content: '全局琐碎规则走检索', project: null, importance: 1 })
-db.insert({ level: 'rules', content: '项目特定规则不全局注入', project: 'femwa', importance: 2 })
+db.insert({ level: 'rules', content: '项目特定规则不全局注入', project: 'femo', importance: 2 })
 db2.insert({ level: 'rules', content: '规则注入测试专用', project: null, importance: 2, created_at: Date.now() })
 db2.insert({ level: 'topic', content: '【起因】规则注入测试话题【经过】x【结果】y', title: '规则注入测试话题', project: 'meow-memory', created_at: Date.now() })
 const injR = buildInjection(db2, ws2, 'test-session-3', '规则注入测试', { hitTopK: 3 }, '.dsh-meow')
 check('rules global high-importance injected', injR !== null && injR.text.includes('【设计原则】') && injR.text.includes('规则注入测试专用'))
 check('rules low-importance not injected', injR !== null && !injR.text.includes('全局琐碎规则走检索'))
 check('rules project-specific not injected globally', injR !== null && !injR.text.includes('项目特定规则不全局注入'))
+// 2026-09-19 口径修复（用户拍板）：project = 全局 / global / null（未标记）、空串，四者都要进首轮注入
+db2.insert({ level: 'rules', content: '口径修复：中文全局标记', project: '全局', importance: 2, created_at: Date.now() })
+db2.insert({ level: 'rules', content: '口径修复：英文全局标记', project: 'global', importance: 2, created_at: Date.now() })
+db2.insert({ level: 'rules', content: '口径修复：空串未标记', project: '', importance: 2, created_at: Date.now() })
+const injG = buildInjection(db2, ws2, 'test-session-4', '口径修复测试', { hitTopK: 3 }, '.dsh-meow')
+check('rules inject: project="全局"', injG !== null && injG.text.includes('口径修复：中文全局标记'))
+check('rules inject: project="global"', injG !== null && injG.text.includes('口径修复：英文全局标记'))
+check('rules inject: project=""（空串算未标记）', injG !== null && injG.text.includes('口径修复：空串未标记'))
 // 命中链路（第二轮起）覆盖 rules/topic：低 importance rules 等关键词命中
 setCurrentProject(ws2, 's-hit', 'meow-memory', '.dsh-meow')
 const hitR = buildHitInjection(db2, ws2, 's-hit', '规则注入测试', { hitTopK: 3 }, '.dsh-meow')
@@ -1023,19 +1035,19 @@ check('keyword hit covers topic', hitR !== null && hitR.text.includes('规则注
 // 当前 project 锚定：工具调用带 project → 状态更新；命中检索限定"全局+当前项目"
 const anchorCtx = { agent: { session: { header: { cwd: ws2, id: 's-anchor' } } } }
 check('no anchor before tools', getCurrentProject(ws2, 's-anchor', '.dsh-meow') === null)
-const remAnc = await rememberTool.execute({ content: '锚定测试记忆', level: 'fact', project: 'femwa', keywords: ['锚定', '测试'], importance: 2 }, anchorCtx)
-check('remember anchors project', remAnc.ok === true && getCurrentProject(ws2, 's-anchor', '.dsh-meow') === 'femwa')
+const remAnc = await rememberTool.execute({ content: '锚定测试记忆', level: 'fact', project: 'femo', keywords: ['锚定', '测试'], importance: 2 }, anchorCtx)
+check('remember anchors project', remAnc.ok === true && getCurrentProject(ws2, 's-anchor', '.dsh-meow') === 'femo')
 await searchTool.execute({ query: '锚定', project: 'meow-memory' }, anchorCtx)
 check('search re-anchors project', getCurrentProject(ws2, 's-anchor', '.dsh-meow') === 'meow-memory')
 await projectTool.execute({ project: 'dsh' }, anchorCtx)
 check('memory_project anchors project', getCurrentProject(ws2, 's-anchor', '.dsh-meow') === 'dsh')
 // 锚定后命中：全局 + 当前项目；未锚定只全局（命中链路）
-await projectTool.execute({ project: 'femwa' }, anchorCtx)
-db2.insert({ level: 'fact', content: 'femwa 专有命中词', project: 'femwa', created_at: Date.now() })
-const hitAnc = buildHitInjection(db2, ws2, 's-anchor', 'femwa 专有命中词', { hitTopK: 3 }, '.dsh-meow')
-check('anchored hit includes current project', hitAnc !== null && hitAnc.text.includes('femwa 专有命中词'))
-const hitNoAnc = buildHitInjection(db2, ws2, 's-no-anchor', 'femwa 专有命中词', { hitTopK: 3 }, '.dsh-meow')
-check('unanchored hit excludes project-only', hitNoAnc === null || !hitNoAnc.text.includes('femwa 专有命中词'))
+await projectTool.execute({ project: 'femo' }, anchorCtx)
+db2.insert({ level: 'fact', content: 'femo 专有命中词', project: 'femo', created_at: Date.now() })
+const hitAnc = buildHitInjection(db2, ws2, 's-anchor', 'femo 专有命中词', { hitTopK: 3 }, '.dsh-meow')
+check('anchored hit includes current project', hitAnc !== null && hitAnc.text.includes('femo 专有命中词'))
+const hitNoAnc = buildHitInjection(db2, ws2, 's-no-anchor', 'femo 专有命中词', { hitTopK: 3 }, '.dsh-meow')
+check('unanchored hit excludes project-only', hitNoAnc === null || !hitNoAnc.text.includes('femo 专有命中词'))
 
 // 命中基于 keywords 而非全文：content 含词但 keywords 不含 → 不命中（防噪音）
 const noiseId = db2.insert({ level: 'fact', content: '这段话的全文里出现了测试两个字但关键词是别的', project: null }).id
@@ -1073,8 +1085,8 @@ check('hit shows unmarked prefix + full id + absolute/relative timestamps', hitD
 db2.update('fact', datedId, { status: 'archived' })
 const searchRules = await searchTool.execute({ query: '全局铁律' }, projCtx)
 check('search default scope includes rules', searchRules.hits.some((h) => h.content.includes('全局铁律')))
-db.insert({ level: 'rules', content: 'femwa 设计铁律：语法错误必须报错', project: 'femwa', importance: 2 })
-const pjRules = await projectTool.execute({ project: 'femwa' }, projCtx)
+db.insert({ level: 'rules', content: 'femo 设计铁律：语法错误必须报错', project: 'femo', importance: 2 })
+const pjRules = await projectTool.execute({ project: 'femo' }, projCtx)
 check('project rules injected in paragraph', pjRules.text.includes('设计原则') && pjRules.text.includes('语法错误必须报错'))
 
 // system prompt 手册：宿主有 systemPrompt 服务 → 注册 order 130 的静态 section；无 → 静默跳过
@@ -1276,8 +1288,8 @@ check('post-compaction reinjection injects snapshot + projects', dReinj.kind ===
   dReinj.messages[0].source.kind === 'plugin' && dReinj.messages[0].source.form === 'snapshot' &&
   dReinj.messages[0].content[0].text.includes('===== 长期记忆 =====') &&
   dReinj.messages[0].content[0].text.includes('【会话已压缩】') &&
-  dReinj.messages[0].content[0].text.includes('【项目：femwa】') &&
-  dReinj.messages[0].content[0].text.includes('femwa 项目重注入全景条目') &&
+  dReinj.messages[0].content[0].text.includes('【项目：femo】') &&
+  dReinj.messages[0].content[0].text.includes('femo 项目重注入全景条目') &&
   !dReinj.messages[0].content[0].text.includes('本轮用户prompt：') &&
   dReinj.messages[1] === reinjMsg && dReinj.messages[1].content[0].text === '压缩后的第一条消息')
 check('reinjection preserves user text', dReinj.messages[1].content[0].text === '压缩后的第一条消息')
@@ -1310,7 +1322,7 @@ check('no reinjection for subagent, pending kept', dSubPending.messages[0].conte
 await handlers['session/event']({ id: 's-reinj5', header: { cwd: wsReinj } }, { type: 'compaction/end', time: Date.now(), data: { compactionId: 'c5', turn: null } })
 const reinjRemember = tools.find((t) => t.name === 'memory_remember')
 const reinjRememberCtx = { agent: { session: { header: { cwd: wsReinj, id: 's-reinj5' } } } }
-const rReinj5 = await reinjRemember.execute({ content: '压缩前本会话写入的记忆', project: 'femwa', keywords: ['压缩', '写入', '记忆', '回放', '第三块', '重注入', '痕迹', '测试'], importance: 1 }, reinjRememberCtx)
+const rReinj5 = await reinjRemember.execute({ content: '压缩前本会话写入的记忆', project: 'femo', keywords: ['压缩', '写入', '记忆', '回放', '第三块', '重注入', '痕迹', '测试'], importance: 1 }, reinjRememberCtx)
 const reinjAgent5 = { session: { header: { cwd: wsReinj, id: 's-reinj5' }, events: [] }, steer: () => {} }
 const dReinj5 = await preStep(
   { agent: reinjAgent5, messages: [{ content: [{ type: 'text', text: '第三块测试' }], source: { kind: 'user' } }], turn: 1, step: 1, signal: new AbortController().signal },

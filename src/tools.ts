@@ -4,7 +4,7 @@
  * 写规则（进 description 给模型看）：
  * - fact/lesson 一句话直陈 ≤60 字（短是关键词命中注入的前提）；
  * - 用户介绍项目设计思路/框架/决策理由的原话必须保留措辞，不转述（project/lesson）；
- * - project 必填项目名（femwa / meow-memory / meow-eyes / dsh …）；
+ * - project 必填项目名（femo / meow-memory / meow-eyes / dsh …）；
  * - topic 必填标题（对象+动作，禁宽泛名）+ 建议目标句。
  */
 
@@ -280,7 +280,7 @@ function searchTool(dir: string): ToolDefinition {
           // 检索元数据视图：归属 + id + 相对时间 + 关键词（无关键词回退原文开头）；原文内容不显示。
           const kw = (Array.isArray(h.keywords) ? h.keywords : []).filter((x): x is string => typeof x === 'string' && x.length > 0)
           const about = kw.length > 0 ? kw.join(', ') : `${String(h.content ?? '').slice(0, 40)}…`
-          // 归属显示：'全局'=真全局；null=未标记（可能是数据 bug）；多值 join '/'（如 dsh/femwa）。
+          // 归属显示：'全局'=真全局；null=未标记（可能是数据 bug）；多值 join '/'（如 dsh/femo）。
           const proj = `${projectLabel(h.project)} : ${String(h.level ?? '')}`
           const rel = relativeTime(h.updated_at ?? null)
           lines.push(`[${proj}] [${String(h.id ?? '')}] [${rel}] 关于：${about}`)

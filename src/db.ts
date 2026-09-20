@@ -81,14 +81,30 @@ export function globalProjectMarker(): string {
   return marker
 }
 
-/** 是否全局标记（认真值 + 当前语言包写法：跨语言切换后新旧条目都要认）。
+/** 全局标记的英文真值（en 语言包 labels.md 的 project.global 写法）。与中文真值一样
+ *  永久认——中英混写的历史库里 "global" 曾按字面值落库，不认它就会退化成一条叫
+ *  global 的假项目。2026-09-19 用户拍板：全局 / global / null 都要当全局。 */
+export const GLOBAL_PROJECT_CANON_EN = 'global'
+
+/** 是否全局标记（中文真值 + 英文真值 + 当前语言包写法：跨语言切换后新旧条目都要认）。
  *  容忍首尾空白与大小写：模型照 prompt 写字面值，英文里 "Global"/"global " 都会出现，
  *  漏认一次就是一条本该全局的记忆退化成一个假项目——宁可宽。 */
 export function isGlobalProject(field: string | null): boolean {
   if (field === null) return false
   const trimmed = field.trim()
   if (trimmed === GLOBAL_PROJECT_CANON) return true
+  if (trimmed.toLowerCase() === GLOBAL_PROJECT_CANON_EN) return true
   return trimmed.toLowerCase() === globalProjectMarker().toLowerCase()
+}
+
+/** 是否「全局适用」：未标记（null）、空串、任何全局标记（全局 / global / 当前语言写法）都算。
+ *  首轮 rules 注入与关键词命中链路共用这一口径——2026-09-19 用户拍板「全局、global、null
+ *  都注入」；修前 inject.ts 首轮过滤只认 project === null，于是按文档写"全局"的准则反而
+ *  永不注入（口径 bug：父级库 15 条标"全局"的 rules 含 push 红线一直没进过首轮）。 */
+export function isGlobalScope(field: string | null): boolean {
+  if (field === null) return true
+  const trimmed = field.trim()
+  return trimmed === '' || isGlobalProject(trimmed)
 }
 
 /** project 字段 → 项目名列表（逗号分隔多值，兼容单值；全局标记/空 = 无具体项目）。 */
@@ -103,7 +119,7 @@ export function projectCovers(field: string | null, name: string): boolean {
   return projectList(field).includes(name)
 }
 
-/** project 字段的展示标签：全局标记=真全局（按当前语言显示）；null/''=未标记；多值 join '/'（如 dsh/femwa）。 */
+/** project 字段的展示标签：全局标记=真全局（按当前语言显示）；null/''=未标记；多值 join '/'（如 dsh/femo）。 */
 export function projectLabel(field: string | null): string {
   if (isGlobalProject(field)) return globalProjectMarker()
   if (field === null || field === '') return lbl('project.unlabeled')

@@ -116,5 +116,5 @@ III. Writing standards (they apply to both new and updated memories):
 - If the user starts telling you about a brand-new project, create that project.
 - If the information applies to one specific project, write that project's name when you remember it.
 - If it applies globally, not to any single project, set project to "global".
-- If it isn't global but does apply to several projects, list the project names separated by commas (e.g. "dsh, femwa").
+- If it isn't global but does apply to several projects, list the project names separated by commas (e.g. "dsh, femo").
 - If an entry's project field is wrong or incomplete, update it.

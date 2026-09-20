@@ -72,7 +72,7 @@ frozen at the last conversation timestamp.
   relative time, hit-injection / memory_project (full-text view) show relative + absolute
   (e.g. "2026-08-15 10:58 [2 days ago]").
 - **Project attribution**: global info gets `project: "全局"` (distinct from blank = unmarked);
-  multi-project info uses comma-separated names (e.g. `"dsh, femwa"`) — search/hits match
+  multi-project info uses comma-separated names (e.g. `"dsh, femo"`) — search/hits match
   "contains current project name OR global".
 - **Per-window dream**: a window becomes dream-eligible once idle ≥ `idleMinutes` (default
   **180 min = 3 hours**, replacing the old night window); every window whose last chat is

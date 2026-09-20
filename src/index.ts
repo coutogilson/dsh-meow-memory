@@ -877,9 +877,20 @@ async function applyInner(ctx: Context, config: unknown): Promise<void> {
   // 2) turn 结束：dream 轮推进 / 自动反思。
   // 同 pre-step 的 fail-open：同步监听器里抛错（如 advanceDream→steer、DB 读）不允许
   // 改变宿主 turn 收尾语义，吞掉记日志（dream 租约有过期自愈兜底，不会因此卡死）。
-  ctx.on('agent/turn-stopping', ({ agent }) => {
+  // 反思排队判重（issue #19）：sendMemoryTurn 走 followup 把反思排进「下一轮」，它不在
+  // 本 turn 的事件流里，于是 scanTurn().sawReflect 在本 turn 收尾期间恒为 false。0.26.0
+  // 起 turn-stopping 在一次收尾窗口内会触发多次（每个 step 收尾、被其它插件 steer 续命
+  // 后再触发），每次都再排一条，排 N 条就被后面 N 个 turn 依次消费——真机实测同一反思
+  // 连发 4 次，每次都要模型回一句「无需记忆」，白烧 token。
+  // 判重键取宿主事件载荷里的 turn（agent/turn-stopping: { agent, turn, signal }）：同一
+  // turn 只排一条；反思轮真正跑起来后 sawReflect=true 自然清账；换 turn 键值不同自动放行
+  // ——不会像布尔闩那样在「排了却没跑」时永久卡死。载荷无 turn 的宿主退回旧行为。
+  const reflectQueuedTurn = new Map<string, number>()
+  const MAX_REFLECT_TRACKED = 512
+
+  ctx.on('agent/turn-stopping', ({ agent, turn }) => {
     try {
-      turnStoppingCore(agent)
+      turnStoppingCore(agent, turn)
     } catch (e) {
       try {
         ctx.logger.warn(`meow-memory: turn-stopping 处理失败（已忽略）: ${e instanceof Error ? e.message : String(e)}`)
@@ -888,7 +899,7 @@ async function applyInner(ctx: Context, config: unknown): Promise<void> {
   })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- agent 形状来自宿主事件映射，透传不重塑
-  const turnStoppingCore = (agent: any): void => {
+  const turnStoppingCore = (agent: any, turn?: number): void => {
     const t0 = Date.now()
     if (agent.session.header.origin === 'subagent') return // 子代理不参与（origin 权威判定）
     registerLiveAgent(agent)
@@ -925,7 +936,12 @@ async function applyInner(ctx: Context, config: unknown): Promise<void> {
     const ws = workspaceOfAgent(agent)
     if (!ws) return
     const { sawToolCall, lastToolName, sawReflect, turnText } = scanTurn(sessionEventsOf(agent.session))
-    if (sawReflect) return // 本 turn 已反思过（含反思轮自身结束）
+    if (sawReflect) {
+      reflectQueuedTurn.delete(sidTs) // 本 turn 已反思过（含反思轮自身结束）：排队痕迹用完即清
+      return
+    }
+    // 本 turn 已经排过一条（followup 排在 next-turn，事件流里还看不见）→ 不再重复排（issue #19）
+    if (turn !== undefined && reflectQueuedTurn.get(sidTs) === turn) return
     if (!sawToolCall) return // 纯聊天轮，不反思
     if (lastToolName !== undefined && lastToolName.startsWith('memory_')) return // 已主动记忆
     if (consecutiveToolSteps(sessionEventsOf(agent.session)) < resolved.reflectTurns) return // 单任务内连续工具 step 不足
@@ -934,6 +950,15 @@ async function applyInner(ctx: Context, config: unknown): Promise<void> {
     // 一轮——steer 延续同 turn 会把 AI 的工作汇报顶成中间步骤，见 sendMemoryTurn）。
     // 换模型由下方 agent/request waterfall 承接——本 turn 带 REFLECT_MARKER 时自动覆盖模型。
     if (sendMemoryTurn(agent, message, ws, resolved.projectDir, `reflect sid=${shortSessionId(sidTs)}`)) {
+      if (turn !== undefined) {
+        reflectQueuedTurn.set(sidTs, turn)
+        // 进程级 Map 兜底上限：只保最近 MAX_REFLECT_TRACKED 个会话（Map 保留插入序）。
+        while (reflectQueuedTurn.size > MAX_REFLECT_TRACKED) {
+          const oldest = reflectQueuedTurn.keys().next().value
+          if (oldest === undefined) break
+          reflectQueuedTurn.delete(oldest)
+        }
+      }
       ctx.logger.info(`meow-memory: reflect sent as standalone turn after ${resolved.reflectTurns}+ tool turns`)
     } else {
       ctx.logger.warn('meow-memory: reflect 发送失败（本轮不反思，下轮重试）')

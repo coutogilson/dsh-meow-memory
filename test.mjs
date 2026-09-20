@@ -860,6 +860,31 @@ check('remember requires keywords', missK.includes('keywords 参数必填'))
 const missI = await rememberTool.execute({ content: '缺参测试', level: 'fact', project: 'dsh', keywords: ['缺参', '测试'] }, updCtx).catch((e) => String(e?.message ?? e))
 check('remember requires importance', missI.includes('importance 参数必填'))
 
+// ── issue #24：XML 参数通道把 array/number/boolean 送成字符串时的兜底 ──
+// 真机现象：schema 声明 array，通道到达 execute 时却是 '["a","b"]' 文本，旧实现只认
+// Array.isArray → 一律报「keywords 必填」，该类宿主上 memory_remember 完全不可用。
+const wsCh = mkdtempSync(join(tmpdir(), 'mm-chan-'))
+const dbCh = new MemoryDb(memoryDbPath(wsCh))
+const chCtx = { agent: { session: { header: { cwd: wsCh, id: 't-chan' } } } }
+const ch1 = await rememberTool.execute({ content: '通道甲', level: 'fact', project: 'dsh', keywords: '["通道","兜底","数组","文本","解析"]', importance: '3' }, chCtx)
+check('issue#24 keywords: JSON 数组文本可解析', ch1.ok === true && ch1.keywords.length === 5 && ch1.keywords[0] === '通道', JSON.stringify(ch1))
+check('issue#24 importance: 数字字符串归一', dbCh.findById(ch1.id)?.row.importance === 3)
+const ch2 = await rememberTool.execute({ content: '通道乙', level: 'fact', project: 'dsh', keywords: '通道, 兜底, 逗号, 分隔', importance: 2 }, chCtx)
+check('issue#24 keywords: 逗号分隔文本可解析', ch2.ok === true && ch2.keywords.length === 4 && ch2.keywords[3] === '分隔', JSON.stringify(ch2))
+const ch3 = await rememberTool.execute({ content: '通道丙', level: 'fact', project: 'dsh', keywords: ['["嵌套","JSON","文本"]'], importance: 1 }, chCtx)
+check('issue#24 keywords: 数组内嵌 JSON 文本可解析', ch3.ok === true && ch3.keywords.length === 3 && ch3.keywords[0] === '嵌套', JSON.stringify(ch3))
+const ch4 = await rememberTool.execute({ content: '通道丁', level: 'lesson', project: 'dsh', keywords: ['纠正', '布尔', '字符串'], importance: 1, corrected: 'true' }, chCtx)
+check('issue#24 corrected: 布尔字符串归一', dbCh.findById(ch4.id)?.row.corrected === 1)
+const chErr = await rememberTool.execute({ content: '通道戊', level: 'fact', project: 'dsh', keywords: ' , , ', importance: 1 }, chCtx).catch((e) => String(e?.message ?? e))
+check('issue#24 解析不出才报错、且与「未提供」区分', chErr.includes('string('), chErr)
+const updCh = tools.find((t) => t.name === 'memory_update')
+const awk = await updCh.execute({ id: ch2.id.slice(0, 12), keywords: '更新, 通道, 关键词' }, chCtx)
+check('issue#24 memory_update keywords 字符串可解析', awk.ok === true && dbCh.findById(ch2.id)?.row.keywords.length === 3, JSON.stringify(awk))
+const searchCh = tools.find((t) => t.name === 'memory_search')
+const sCh = await searchCh.execute({ query: '通道兜底', k: '2' }, chCtx)
+check('issue#24 search k 数字字符串归一', Array.isArray(sCh.hits) && sCh.hits.length <= 2)
+dbCh.close()
+
 // 压缩信号释放 seen：compaction 事件 → sessions 文件清空 → 记忆可再次命中
 const wsSeen = mkdtempSync(join(tmpdir(), 'mm-seen-'))
 const dbSeen = new MemoryDb(memoryDbPath(wsSeen))
@@ -1431,6 +1456,28 @@ const steered6 = []
 const agentD6 = { session: { header: { cwd: ws, id: 's4c' }, events: sixSteps }, steer: (m) => steered6.push(m) }
 stopping({ agent: agentD6, turn: 1, signal: new AbortController().signal })
 check('no steer on 6 tool steps', steered6.length === 0)
+
+// issue #19（v0.26.0 回归）：反思走 followup 排进 next-turn，本 turn 事件流里看不见，
+// 而 turn-stopping 在一次收尾窗口内会多次触发 → 同一 turn 反复排队（真机实测连发 4 次）。
+// 判重按宿主载荷里的 turn 号：同一 turn 只排一条，换 turn 自动放行。
+const steered19 = []
+const agent19 = { session: { header: { cwd: ws, id: 's19' }, events: sevenSteps }, steer: (m) => steered19.push(m) }
+stopping({ agent: agent19, turn: 41, signal: new AbortController().signal })
+stopping({ agent: agent19, turn: 41, signal: new AbortController().signal })
+stopping({ agent: agent19, turn: 41, signal: new AbortController().signal })
+check('issue#19 同 turn 收尾窗口内只排一条反思', steered19.length === 1, `got ${steered19.length}`)
+stopping({ agent: agent19, turn: 42, signal: new AbortController().signal })
+check('issue#19 换 turn 后放行（不是永久闩）', steered19.length === 2, `got ${steered19.length}`)
+const steered19b = []
+const agent19b = {
+  session: {
+    header: { cwd: ws, id: 's19' },
+    events: [...sevenSteps, events.userMsg('[meow-memory-reflect] 反思任务', { kind: 'plugin', plugin: 'meow-memory' })],
+  },
+  steer: (m) => steered19b.push(m),
+}
+stopping({ agent: agent19b, turn: 43, signal: new AbortController().signal })
+check('issue#19 反思轮自身结束不再排', steered19b.length === 0, `got ${steered19b.length}`)
 
 // 跨 turn 不算：前面 turn 的工具不累计进当前 turn
 const acrossTurns = [events.turnStart(), events.userMsg('干活1'), events.assistantWithTool('bash'), events.turnStart(), events.userMsg('干活2'), events.assistantWithTool('bash')]

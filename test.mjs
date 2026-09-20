@@ -1667,6 +1667,46 @@ check('parseModelSpec blank → undefined', parseModelSpec('') === undefined && 
 }
 
 
+// ── issue #21：settings 链路（inject 回调永远异步）下 user 层必须生效 ──
+// 真 cordis 里 inject 回调跑在异步启动的子 fiber 中，永不与注册同步；而老的 makeCtx
+// 根本没有 inject/settings，整条设置链路被 applyInner 的 try/catch 吞掉——这就是
+// 「user 层从未生效」长期没被测到的原因。这个 mock 补齐真形状：异步 inject +
+// settings 服务（installSection 时同步回填 setSource）。
+function makeSettingsCtx(userLayer) {
+  const tools = []
+  const settingsSvc = {
+    installSection: (_owner, _ns, _schema, _entry, hooks) => {
+      hooks.setSource(() => userLayer)
+      return () => {}
+    },
+  }
+  const ctx = {
+    logger: { info: () => {}, warn: () => {}, error: console.error },
+    tools: { register: (t) => tools.push(t) },
+    on: () => {},
+    effect: () => () => {},
+    subagents: { start: () => { throw new Error('subagents not expected in tests') } },
+    get: (n) => (n === 'settings' ? settingsSvc : undefined),
+    // 与真 cordis 一致：回调**不同步**执行（下一拍微任务才跑）
+    inject: (_deps, cb) => { queueMicrotask(() => cb({ settings: settingsSvc, effect: ctx.effect })) },
+  }
+  return { ctx, tools }
+}
+
+// ① user 层 enabled:false 必须真的关掉（旧代码忽略它 → 照常注册 7 个工具）
+const sc1 = makeSettingsCtx({ enabled: false })
+await apply(sc1.ctx, { enabled: true, projectDir: '.dsh-meow' })
+check('issue#21 user 层 enabled:false 生效（不注册工具）', sc1.tools.length === 0, `got ${sc1.tools.length}`)
+// ② user 层 promptLang 必须真的写进 prompt-loader
+const sc2 = makeSettingsCtx({ promptLang: 'en' })
+await apply(sc2.ctx, { enabled: true, projectDir: '.dsh-meow' })
+check('issue#21 user 层 promptLang 生效', getPromptLang() === 'en', `got ${getPromptLang()}`)
+setPromptLang('zh')
+// ③ 未被 user 层覆盖的字段仍按 patch 层跑（user 层是字段级覆盖、不是整层替换）
+const sc3 = makeSettingsCtx({ promptLang: 'zh' })
+await apply(sc3.ctx, { enabled: true, projectDir: '.dsh-meow', hitTopK: 9 })
+check('issue#21 未被 user 层覆盖的字段仍走 patch（工具照常注册）', sc3.tools.length === 7, `got ${sc3.tools.length}`)
+
 // disabled
 const { ctx: ctxOff, tools: toolsOff, handlers: handlersOff } = makeCtx()
 await apply(ctxOff, { enabled: false })

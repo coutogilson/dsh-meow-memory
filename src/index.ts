@@ -508,21 +508,32 @@ function installSettingsSectionCompat(
   })
 }
 
+/** 等设置源就绪的上限（issue #21）。真机上 inject 回调最快一个微任务就会跑，
+ *  这里给足余量；仅当 settings 服务异常/注册回调始终不回填时才真的等满。 */
+const SETTINGS_SOURCE_WAIT_MS = 250
+
 async function applyInner(ctx: Context, config: unknown): Promise<void> {
   // ── 设置页命名空间（喵记忆标签页的数据底座）──
-  // installSettingsSection 必须先于 resolveConfig：setSource 在 install 时同步回填
-  // getter，首启/热重载的首次 resolve 就能合并 settings.yaml 的 user 层。
+  // installSettingsSection 必须先于 resolveConfig，但「先注册」≠「注册时同步回填」——
+  // inject 回调是异步的（见下），所以 resolve 之前必须显式等 source 就绪。
   // 三层模型：CONFIG_DEFAULTS（默认）< patch config（cordis.patch.yml 手编，合成进
   // base 显示为"预填"）< 设置页 user 层（标签页改动，字段级覆盖）。
   // base 必须合成 patch：否则 patch 手编的值（如 delegate/model）在标签页显示为空，
   // 用户会以为配置丢了（2026-09-02 实测踩坑）。
   const settingsBase = mergeConfigLayer(CONFIG_DEFAULTS, config)
   let settingsGet: (() => unknown) | undefined
+  // 设置源就绪信号（issue #21）：ctx.inject(deps, cb) 的回调**永远不会同步执行**——它
+  // 等价于 ctx.plugin({ inject, apply })，插件体跑在异步启动的子 fiber 里（cordis
+  // lib/index.js:1599），依赖是否已就绪都一样。原实现「注册完紧接着下一行读 setSource
+  // 回填的 getter」因此必然拿到 undefined：settings.yaml / 设置页的 user 层从未进过
+  // resolve，设置页对「影响行为」的字段等于纯展示，连"重启后生效"也不成立。
+  // 现在：注册后等 source 就绪再 resolve（等待有界，见 SETTINGS_SOURCE_WAIT_MS）。
+  let markSourceReady: (() => void) | undefined
+  const sourceReady = new Promise<void>((resolve) => { markSourceReady = resolve })
+  let sourceWaitArmed = false
   try {
     // 双版本设置区注册（0.1.2 及以下旧版 / 0.1.3+ 新版）分流见 installSettingsSectionCompat：
     // 新版走 settings.installSection；旧版回退 settings.register 复刻旧自由函数行为。
-    // 注册必须先于 resolveConfig：setSource 在 install 时同步回填 getter，
-    // 首启/热重载的首次 resolve 就能合并 settings.yaml 的 user 层。
     // 注册失败（比如 settings 服务未装配）不影响插件本体：
     // 下面 catch 会降级为只走 patch 层配置，设置页标签不可用。
     ctx.inject(['settings'], (settingsCtx: {
@@ -535,12 +546,14 @@ async function applyInner(ctx: Context, config: unknown): Promise<void> {
         },
         setSource: (get: () => unknown): void => {
           settingsGet = get
+          markSourceReady?.() // 回填即就绪：唤醒下面的有界等待
         },
         onChange: (): void => {
-          ctx.logger.info('meow-memory: 配置已通过设置页更新（热重载/重启插件后生效）')
+          ctx.logger.info('meow-memory: 配置已通过设置页更新（重载/重启插件后生效）')
         },
       })
     })
+    sourceWaitArmed = true // inject 已受理才值得等；ctx.inject 不存在时走 catch，不必等
   } catch (e) {
     // 设置服务未装配（别的 profile）不挡插件本体：config 退回 patch 层。
     const msg = `meow-memory: 设置命名空间注册失败（标签页不可用，配置走 patch 层）：${e instanceof Error ? (e.stack ?? e.message) : String(e)}`
@@ -550,6 +563,14 @@ async function applyInner(ctx: Context, config: unknown): Promise<void> {
     } catch {
       /* 留痕失败忽略 */
     }
+  }
+  // 有界等待设置源就绪（issue #21）：真机上回调一个微任务内就跑完，不会真的等到上限；
+  // 服务缺失/注册失败时最多等 SETTINGS_SOURCE_WAIT_MS 就继续，绝不挂起。
+  if (sourceWaitArmed) {
+    await Promise.race([
+      sourceReady,
+      new Promise<void>((resolve) => { setTimeout(resolve, SETTINGS_SOURCE_WAIT_MS) }),
+    ])
   }
   const merged = mergeConfigLayer(config, settingsGet?.() as Record<string, unknown> | undefined)
   const resolved = resolveConfig(merged)

@@ -71,10 +71,17 @@ if (watch) {
   // prompt 文案外置（v0.19.0）：src/prompts/<lang>/*.md → lib/prompts/，运行时
   // readFileSync 读取（prompt-loader.ts 以 import.meta.url 定位 lib/prompts），
   // 不参与 esbuild bundle。语言包 = 一个子目录，新增语言不需要动构建脚本。
-  // filter：Delete_ 前缀文件（改名留痕协议产物）不进发布包。
+  // filter：Delete_ 前缀（改名留痕协议产物）与 *.bak-*（改名/重建备份）都不进发布包。
+  // 2026-09-20 实证：src/prompts 下的 *.bak-20260914-femwa-word 会被整目录 cpSync 拷进
+  // lib/prompts，而 package.json 的 files 白名单含 lib/prompts/** → 6 个备份文件直接进了 tgz
+  // （0.26.0 是 28 个文件，那次 pack 变成 34 个）。
+  const keepInPackage = (p) => {
+    const name = p.split(/[\\/]/).pop() ?? ''
+    return !name.startsWith('Delete_') && !/\.bak(-|$)/.test(name)
+  }
   cpSync(new URL('./src/prompts', import.meta.url), new URL('./lib/prompts', import.meta.url), {
     recursive: true,
-    filter: (src) => !src.split(/[\\/]/).pop().startsWith('Delete_'),
+    filter: keepInPackage,
   });
   await Promise.all([build(hostOptions), build(clientOptions)]);
 }

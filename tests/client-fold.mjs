@@ -252,13 +252,20 @@ console.log('=== 6. foldLabel 文案 ===')
   check('已更新 2 条', foldLabel({ ...base, updateCount: 2 }, false) === '▸ 记忆反思 · 已更新 2 条')
   check('dream 新增', foldLabel({ ...base, variant: 'dream', rememberCount: 1 }, true) === '▾ 记忆梦境任务 · 新增记忆 1 条')
   check('中断', foldLabel({ ...base, status: 'interrupted' }, false) === '▸ 记忆反思已中断')
+  // issue #20（用户拍板 2026-09-20）：dream 运行中横条要提示"插话会拼进本轮"；
+  // 反思运行中不带提示。文案同样走 i18n 层。
+  check('dream running 提示插话', foldLabel({ ...base, variant: 'dream', status: 'running' }, false) === '▸ 记忆梦境任务进行中…（插话会拼进本轮）')
+  check('reflect running 无提示', foldLabel({ ...base, status: 'running' }, false) === '▸ 记忆反思进行中…')
   setUiLocaleForTest('en')
   check('en 新增记忆 3 条', foldLabel({ ...base, rememberCount: 3 }, false) === '▸ Memory reflection · 3 memories added')
   check('en 无需记忆', foldLabel(base, false) === '▸ Memory reflection · nothing to save')
   check('en dream 中断', foldLabel({ ...base, variant: 'dream', status: 'interrupted' }, false) === '▸ Memory dream task interrupted')
+  check('en dream running 提示插话', foldLabel({ ...base, variant: 'dream', status: 'running' }, false) === '▸ Memory dream task in progress… (your message joins this turn)')
+  check('en reflect running 无提示', foldLabel({ ...base, status: 'running' }, false) === '▸ Memory reflection in progress…')
   setUiLocaleForTest('pt-br')
   check('pt-br 新增记忆 3 条', foldLabel({ ...base, rememberCount: 3 }, false) === '▸ Reflexão de memória · 3 memórias adicionadas')
   check('pt-br running', foldLabel({ ...base, status: 'running' }, false) === '▸ Reflexão de memória em andamento…')
+  check('pt-br dream running 提示插话', foldLabel({ ...base, variant: 'dream', status: 'running' }, false) === '▸ Consolidação ociosa de memória (dream) em andamento… (mensagem entra nesta rodada)')
   setUiLocaleForTest('zh')
 }
 

@@ -14,6 +14,7 @@ export const zh: Record<UiKey, string> = {
   'fold.title.reflect': '记忆反思',
   'fold.title.dream': '记忆梦境任务',
   'fold.status.running': '{title}进行中…',
+  'fold.hint.running': '（插话会拼进本轮）',
   'fold.status.interrupted': '{title}已中断',
   'fold.status.remembered': '{title} · 新增记忆 {n} 条',
   'fold.status.updated': '{title} · 已更新 {n} 条',

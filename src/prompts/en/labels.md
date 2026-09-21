@@ -9,7 +9,7 @@
 - inject.rules: Design principles
 - inject.guide: Memory guide
 - inject.guideSearchLine: Use memory_search when you need something (query is required, never search empty) and memory_read to read an entry in full.
-- inject.guideProjectLine: When a task involves a project, start with memory_project for the project-wide picture (pass the project name, it cannot be empty) 鈥?that is how you get a whole-project understanding.
+- inject.guideProjectLine: When a task involves a project, start with memory_project for the project-wide picture (pass the project name, it cannot be empty) — that is how you get a whole-project understanding.
 - inject.guideProjects: All of the user's projects: {list}
 - inject.reinjectSection: Session compacted
 - inject.reinjectIntro: This session's earlier context has been compacted. Below are the memories that were visible in this session before compaction and are now gone with it, all rebuilt from the latest data:
@@ -26,7 +26,7 @@
 - dream.groupUnlabeled: no project - global information, or missing a project label
 - dream.row.keywordsLabel: keywords:
 - dream.row.none: (none)
-- dream.topic.empty: (no topic memories in this group yet 鈥?look back over the conversation, and if there is a new topic, create it following guideline 2 below)
+- dream.topic.empty: (no topic memories in this group yet — look back over the conversation, and if there is a new topic, create it following guideline 2 below)
 - project.unlabeled: unlabeled
 - project.header: [project: {name}]
 - project.empty: [project: {name}] No memory entries for this project yet.
@@ -44,7 +44,8 @@
 - time.hours: {n} h ago
 - time.days: {n} d ago
 - reflect.noProjects: (none yet)
-- remember.error.content: memory_remember: content is required 鈥?add what you want remembered and try again
-- remember.error.project: memory_remember: project is required 鈥?use "{global}" for globally applicable information, or the project name (comma-separate several projects) 鈥?add it and try again
-- remember.error.keywords: memory_remember: keywords is required 鈥?give 8-13 content keywords for retrieval (don't use the project name as a keyword) 鈥?add them and try again
-- remember.error.importance: memory_remember: importance is required 鈥?rate it: 4=fatal red line / health and safety, 3=stressed by the user / globally applicable, 2=a user decision or abstract conclusion, 1=trivia 鈥?add it and try again
+- remember.error.content: memory_remember: content is required — add what you want remembered and try again
+- remember.error.project: memory_remember: project is required — use "{global}" for globally applicable information, or the project name (comma-separate several projects) — add it and try again
+- remember.error.keywords: memory_remember: keywords is required — give 8-13 content keywords for retrieval (don't use the project name as a keyword) — add them and try again
+- remember.error.keywordsEmpty: memory_remember: keywords arrived but no keyword could be parsed out of it (received {received}) — pass a string array, or comma-separated text, and try again
+- remember.error.importance: memory_remember: importance is required — rate it: 4=fatal red line / health and safety, 3=stressed by the user / globally applicable, 2=a user decision or abstract conclusion, 1=trivia — add it and try again

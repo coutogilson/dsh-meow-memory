@@ -508,21 +508,32 @@ function installSettingsSectionCompat(
   })
 }
 
+/** 等设置源就绪的上限（issue #21）。真机上 inject 回调最快一个微任务就会跑，
+ *  这里给足余量；仅当 settings 服务异常/注册回调始终不回填时才真的等满。 */
+const SETTINGS_SOURCE_WAIT_MS = 250
+
 async function applyInner(ctx: Context, config: unknown): Promise<void> {
   // ── 设置页命名空间（喵记忆标签页的数据底座）──
-  // installSettingsSection 必须先于 resolveConfig：setSource 在 install 时同步回填
-  // getter，首启/热重载的首次 resolve 就能合并 settings.yaml 的 user 层。
+  // installSettingsSection 必须先于 resolveConfig，但「先注册」≠「注册时同步回填」——
+  // inject 回调是异步的（见下），所以 resolve 之前必须显式等 source 就绪。
   // 三层模型：CONFIG_DEFAULTS（默认）< patch config（cordis.patch.yml 手编，合成进
   // base 显示为"预填"）< 设置页 user 层（标签页改动，字段级覆盖）。
   // base 必须合成 patch：否则 patch 手编的值（如 delegate/model）在标签页显示为空，
   // 用户会以为配置丢了（2026-09-02 实测踩坑）。
   const settingsBase = mergeConfigLayer(CONFIG_DEFAULTS, config)
   let settingsGet: (() => unknown) | undefined
+  // 设置源就绪信号（issue #21）：ctx.inject(deps, cb) 的回调**永远不会同步执行**——它
+  // 等价于 ctx.plugin({ inject, apply })，插件体跑在异步启动的子 fiber 里（cordis
+  // lib/index.js:1599），依赖是否已就绪都一样。原实现「注册完紧接着下一行读 setSource
+  // 回填的 getter」因此必然拿到 undefined：settings.yaml / 设置页的 user 层从未进过
+  // resolve，设置页对「影响行为」的字段等于纯展示，连"重启后生效"也不成立。
+  // 现在：注册后等 source 就绪再 resolve（等待有界，见 SETTINGS_SOURCE_WAIT_MS）。
+  let markSourceReady: (() => void) | undefined
+  const sourceReady = new Promise<void>((resolve) => { markSourceReady = resolve })
+  let sourceWaitArmed = false
   try {
     // 双版本设置区注册（0.1.2 及以下旧版 / 0.1.3+ 新版）分流见 installSettingsSectionCompat：
     // 新版走 settings.installSection；旧版回退 settings.register 复刻旧自由函数行为。
-    // 注册必须先于 resolveConfig：setSource 在 install 时同步回填 getter，
-    // 首启/热重载的首次 resolve 就能合并 settings.yaml 的 user 层。
     // 注册失败（比如 settings 服务未装配）不影响插件本体：
     // 下面 catch 会降级为只走 patch 层配置，设置页标签不可用。
     ctx.inject(['settings'], (settingsCtx: {
@@ -535,12 +546,14 @@ async function applyInner(ctx: Context, config: unknown): Promise<void> {
         },
         setSource: (get: () => unknown): void => {
           settingsGet = get
+          markSourceReady?.() // 回填即就绪：唤醒下面的有界等待
         },
         onChange: (): void => {
-          ctx.logger.info('meow-memory: 配置已通过设置页更新（热重载/重启插件后生效）')
+          ctx.logger.info('meow-memory: 配置已通过设置页更新（重载/重启插件后生效）')
         },
       })
     })
+    sourceWaitArmed = true // inject 已受理才值得等；ctx.inject 不存在时走 catch，不必等
   } catch (e) {
     // 设置服务未装配（别的 profile）不挡插件本体：config 退回 patch 层。
     const msg = `meow-memory: 设置命名空间注册失败（标签页不可用，配置走 patch 层）：${e instanceof Error ? (e.stack ?? e.message) : String(e)}`
@@ -550,6 +563,14 @@ async function applyInner(ctx: Context, config: unknown): Promise<void> {
     } catch {
       /* 留痕失败忽略 */
     }
+  }
+  // 有界等待设置源就绪（issue #21）：真机上回调一个微任务内就跑完，不会真的等到上限；
+  // 服务缺失/注册失败时最多等 SETTINGS_SOURCE_WAIT_MS 就继续，绝不挂起。
+  if (sourceWaitArmed) {
+    await Promise.race([
+      sourceReady,
+      new Promise<void>((resolve) => { setTimeout(resolve, SETTINGS_SOURCE_WAIT_MS) }),
+    ])
   }
   const merged = mergeConfigLayer(config, settingsGet?.() as Record<string, unknown> | undefined)
   const resolved = resolveConfig(merged)
@@ -749,7 +770,7 @@ async function applyInner(ctx: Context, config: unknown): Promise<void> {
     if (decision === undefined || decision.kind !== 'enter' || signal.aborted) return decision
     if (decision.messages.length === 0) return decision
     // 子代理不注入（origin === 'subagent'，dsh 权威标记）：它们的 prompt 由父代理提供
-    // （如 dsh-femwa 的角色上下文）。注意不能只看 parentSession——GUI fork/续写的
+    // （如 dsh-femo 的角色上下文）。注意不能只看 parentSession——GUI fork/续写的
     // 主会话也有 parentSession（真机踩坑 2026-08-17：fca10feb 被误判为子代理导致注入全失效）。
     if (agent.session.header.origin === 'subagent') return decision
     registerLiveAgent(agent)
@@ -877,9 +898,20 @@ async function applyInner(ctx: Context, config: unknown): Promise<void> {
   // 2) turn 结束：dream 轮推进 / 自动反思。
   // 同 pre-step 的 fail-open：同步监听器里抛错（如 advanceDream→steer、DB 读）不允许
   // 改变宿主 turn 收尾语义，吞掉记日志（dream 租约有过期自愈兜底，不会因此卡死）。
-  ctx.on('agent/turn-stopping', ({ agent }) => {
+  // 反思排队判重（issue #19）：sendMemoryTurn 走 followup 把反思排进「下一轮」，它不在
+  // 本 turn 的事件流里，于是 scanTurn().sawReflect 在本 turn 收尾期间恒为 false。0.26.0
+  // 起 turn-stopping 在一次收尾窗口内会触发多次（每个 step 收尾、被其它插件 steer 续命
+  // 后再触发），每次都再排一条，排 N 条就被后面 N 个 turn 依次消费——真机实测同一反思
+  // 连发 4 次，每次都要模型回一句「无需记忆」，白烧 token。
+  // 判重键取宿主事件载荷里的 turn（agent/turn-stopping: { agent, turn, signal }）：同一
+  // turn 只排一条；反思轮真正跑起来后 sawReflect=true 自然清账；换 turn 键值不同自动放行
+  // ——不会像布尔闩那样在「排了却没跑」时永久卡死。载荷无 turn 的宿主退回旧行为。
+  const reflectQueuedTurn = new Map<string, number>()
+  const MAX_REFLECT_TRACKED = 512
+
+  ctx.on('agent/turn-stopping', ({ agent, turn }) => {
     try {
-      turnStoppingCore(agent)
+      turnStoppingCore(agent, turn)
     } catch (e) {
       try {
         ctx.logger.warn(`meow-memory: turn-stopping 处理失败（已忽略）: ${e instanceof Error ? e.message : String(e)}`)
@@ -888,7 +920,7 @@ async function applyInner(ctx: Context, config: unknown): Promise<void> {
   })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- agent 形状来自宿主事件映射，透传不重塑
-  const turnStoppingCore = (agent: any): void => {
+  const turnStoppingCore = (agent: any, turn?: number): void => {
     const t0 = Date.now()
     if (agent.session.header.origin === 'subagent') return // 子代理不参与（origin 权威判定）
     registerLiveAgent(agent)
@@ -925,7 +957,12 @@ async function applyInner(ctx: Context, config: unknown): Promise<void> {
     const ws = workspaceOfAgent(agent)
     if (!ws) return
     const { sawToolCall, lastToolName, sawReflect, turnText } = scanTurn(sessionEventsOf(agent.session))
-    if (sawReflect) return // 本 turn 已反思过（含反思轮自身结束）
+    if (sawReflect) {
+      reflectQueuedTurn.delete(sidTs) // 本 turn 已反思过（含反思轮自身结束）：排队痕迹用完即清
+      return
+    }
+    // 本 turn 已经排过一条（followup 排在 next-turn，事件流里还看不见）→ 不再重复排（issue #19）
+    if (turn !== undefined && reflectQueuedTurn.get(sidTs) === turn) return
     if (!sawToolCall) return // 纯聊天轮，不反思
     if (lastToolName !== undefined && lastToolName.startsWith('memory_')) return // 已主动记忆
     if (consecutiveToolSteps(sessionEventsOf(agent.session)) < resolved.reflectTurns) return // 单任务内连续工具 step 不足
@@ -934,6 +971,15 @@ async function applyInner(ctx: Context, config: unknown): Promise<void> {
     // 一轮——steer 延续同 turn 会把 AI 的工作汇报顶成中间步骤，见 sendMemoryTurn）。
     // 换模型由下方 agent/request waterfall 承接——本 turn 带 REFLECT_MARKER 时自动覆盖模型。
     if (sendMemoryTurn(agent, message, ws, resolved.projectDir, `reflect sid=${shortSessionId(sidTs)}`)) {
+      if (turn !== undefined) {
+        reflectQueuedTurn.set(sidTs, turn)
+        // 进程级 Map 兜底上限：只保最近 MAX_REFLECT_TRACKED 个会话（Map 保留插入序）。
+        while (reflectQueuedTurn.size > MAX_REFLECT_TRACKED) {
+          const oldest = reflectQueuedTurn.keys().next().value
+          if (oldest === undefined) break
+          reflectQueuedTurn.delete(oldest)
+        }
+      }
       ctx.logger.info(`meow-memory: reflect sent as standalone turn after ${resolved.reflectTurns}+ tool turns`)
     } else {
       ctx.logger.warn('meow-memory: reflect 发送失败（本轮不反思，下轮重试）')
@@ -1259,7 +1305,7 @@ function persistWindowIndex(): void {
 export { PLUGIN_SOURCE, REFLECT_MARKER }
 export { parseModelSpec, REFLECT_DELEGATE_MARKER, REFLECT_DONE_DELEGATE_MARKER, DREAM_DELEGATE_MARKER } from './delegate.js'
 export { collectDreamStates, headerOf, type PersistedSessionLike } from './dream-signal.js'
-export { MemoryDb, memoryDbPath, getDb, closeAllDbs, LEVELS, newId, PROJECT_SUBCATEGORIES, projectList, projectCovers, projectLabel, relativeTime, isGlobalProject, globalProjectMarker, GLOBAL_PROJECT_CANON } from './db.js'
+export { MemoryDb, memoryDbPath, getDb, closeAllDbs, LEVELS, newId, PROJECT_SUBCATEGORIES, projectList, projectCovers, projectLabel, relativeTime, isGlobalProject, isGlobalScope, globalProjectMarker, GLOBAL_PROJECT_CANON, GLOBAL_PROJECT_CANON_EN } from './db.js'
 export { migrateLegacy } from './migrate.js'
 export { buildHitInjection, buildInjection, buildReinjection, buildProjectSectionText, readSeen, markSearched, markAccessed, readInjected, markInjected, markProjectQueried, readProjectQueried, markWritten, readWritten, markReinjectPending, clearReinjectPending, isReinjectPending, MAX_REINJECT_PROJECTS, MAX_REINJECT_WRITTEN, sessionsFile, getCurrentProject, setCurrentProject, releaseSeen } from './inject.js'
 export { buildReflectMessage, consecutiveToolSteps, scanTurn } from './reflect.js'

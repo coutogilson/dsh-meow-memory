@@ -8,7 +8,7 @@
  *   域路由：fact→fact；mistake→lesson(corrected=1)；preference→user；
  *           user_said→project（原话保留）/lesson（纠正语义）；lesson→lesson；
  *           detail→project（含项目结构）/fact；核心区→soul/user。
- *   项目启发式：femwa/femGen/FemWA→femwa；meow-eyes/猫眼→meow-eyes；
+ *   项目启发式：femwa/femo/FemGen（老写法也认）→ femo；meow-eyes/猫眼→meow-eyes；
  *           meow-memory→meow-memory；dsh-meow/dsh 本体/3080/3081→dsh；
  *           无法判定→dsh 兜底（dream 复核分拣）。
  */
@@ -27,7 +27,7 @@ const CATEGORY_TO_LEVEL: Record<string, { level: Level; corrected?: number }> = 
 }
 
 const PROJECT_HINTS: Array<[RegExp, string]> = [
-  [/femwa|femgen|fe4m/i, 'femwa'],
+  [/femwa|femo|femgen|fe4m/i, 'femo'],   // 匹配词保留 femwa/femGen（老 PROJECT.md 里的写法），输出名统一 femo
   [/meow-eyes|猫眼/i, 'meow-eyes'],
   [/meow-memory|memory-meow/i, 'meow-memory'],
   [/dsh-meow|dsh 本体|3080|3081|known-event|agentPreset|apiproxy/i, 'dsh'],

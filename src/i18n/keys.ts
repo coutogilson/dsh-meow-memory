@@ -12,6 +12,7 @@ export const UI_KEYS = [
   'fold.title.reflect',
   'fold.title.dream',
   'fold.status.running',
+  'fold.hint.running',
   'fold.status.interrupted',
   'fold.status.remembered',
   'fold.status.updated',

@@ -16,6 +16,7 @@ export const ptBr: Record<UiKey, string> = {
   'fold.title.reflect': 'Reflexão de memória',
   'fold.title.dream': 'Consolidação ociosa de memória (dream)',
   'fold.status.running': '{title} em andamento…',
+  'fold.hint.running': ' (mensagem entra nesta rodada)',
   'fold.status.interrupted': '{title} interrompida',
   'fold.status.remembered': '{title} · {n} memórias adicionadas',
   'fold.status.updated': '{title} · {n} atualizadas',

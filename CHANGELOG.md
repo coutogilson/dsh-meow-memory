@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.27.0 (unreleased)
+## v0.28.0 (unreleased)
 
 ### 界面文案层：UI/UX 跟随 DSH 语言设置（zh / en / pt-br）
 
@@ -11,6 +11,7 @@
 - **新增语言**：加一个字典文件 + `SUPPORTED_UI_LOCALES` 一行即可（`Record<UiKey, string>` 类型与测试卡住缺键/多余键），不改 UI 代码。文档见 `src/i18n/README.md`。
 - 文案键集 `zh` 侧逐字保留外置前的中文，中文用户视角是纯重构。
 - **设置页提示 ≠ 模型语言包**（review 修正）：`promptLang` 只选 `src/prompts/` 的模型文案包（当前内置 `zh` / `en`），界面语言由 DSH 的语言设置决定。提示里不再宣称内置 `pt-br` 语言包（`pt-br` 只是 UI 语言 id），并明说界面语言与它无关——避免用户照提示设 `promptLang: pt-br` 后静默落回中文包。测试补了对应回归断言。
+- **与 issue #20 合并**：dream 运行中横条的「插话会拼进本轮」提示（上游 0405e1a）在 i18n 层里落成新键 `fold.hint.running`（zh/en/pt-br 三语），逻辑与文案分离。
 
 ### 文档
 
@@ -19,7 +20,39 @@
 
 ### 测试
 
-- 新增 `tests/client-i18n.mjs`（61 项：三语键集/占位符一致、静态查表、语言订阅、DSH 服务接线含 fallback 链与幂等/降级、各模块三语输出、重放注册表）与 `tests/settings-page.mjs`（38 项：标签随语言重注册、页面渲染文案、峰时解析错误文案本地化）；`client-fold` / `client-dream-skip` / `client-delegate-notice` 补 en / pt-br 断言。主套件 405 + 全部 client 套件通过。
+- 新增 `tests/client-i18n.mjs`（61 项：三语键集/占位符一致、静态查表、语言订阅、DSH 服务接线含 fallback 链与幂等/降级、各模块三语输出、重放注册表）与 `tests/settings-page.mjs`（42 项：标签随语言重注册、页面渲染文案、峰时解析错误文案本地化）；`client-fold` / `client-dream-skip` / `client-delegate-notice` 补 en / pt-br 断言，issue #20 的提示断言保留并补齐三语。
+
+## v0.27.0 (2026-09-20)
+
+### 参数通道兜底：keywords 字符串形态不再误判「必填」（#24）
+
+- **问题**：走 XML 参数通道的宿主会把 schema 声明为 `array` 的 `keywords` 送成字符串（`'["代码审计","静态扫描"]'`），旧实现只认 `Array.isArray` → 一律抛「keywords 参数必填」。该类宿主上 `memory_remember` 完全不可用（报告者 50 余次调用只成功 1 次，只能绕过插件直接写 sqlite），且报错把人误导成"压根没传参"。
+- **修法**：新增参数归一——`normalizeKeywords`（数组 / JSON 数组文本 / 「a, b」分隔文本 / 数组内嵌 JSON 文本 → `string[]`）、`coerceNumber`、`coerceBoolean`，应用到 `memory_remember`（keywords/importance/corrected）、`memory_update`（keywords/importance）、`memory_search` 与 `memory_find_similar`（k/days/content_max）。报错拆成「压根没传」与「传了但解析不出（附上收到值的形态）」。
+
+### 反思同一 turn 内不再重复排队（#19）
+
+- **问题**：v0.26.0 把反思改走 `followup` 独立成轮后，它排进 next-turn、不在本 turn 的事件流里，而 `turn-stopping` 在一次收尾窗口内会触发多次 → `scanTurn().sawReflect` 恒为 false → 每次都再排一条，排 N 条被后面 N 个 turn 依次消费（真机实测同一反思连发 4 次，每次都要模型回一句「无需记忆」）。
+- **修法**：按宿主事件载荷自带的 `turn`（`agent/turn-stopping: { agent, turn, signal }`）做 per-session per-turn 判重：同一 turn 只排一条；换 turn 键值不同自动放行（**不是永久闩**）；`sawReflect` 命中即清账；载荷无 `turn` 的宿主退回旧行为。
+
+### 设置 user 层恒不生效（#21）
+
+- **问题**：`ctx.inject(deps, cb)` 的回调**永远不会同步执行**——它等价于 `ctx.plugin({ inject, apply })`，插件体跑在异步启动的子 fiber 里（依赖是否已就绪都一样）。而 `applyInner` 在注册的下一行就做配置快照 → `settingsGet` 恒为 `undefined`，`settings.yaml` / 设置页的 user 层（不止 `dream.*`，是**所有**字段）从来没进过 resolve；`onChange` 又只打日志，所以连"重启后生效"也不成立——设置页对「影响行为」的字段等于纯展示。
+- **修法**：注册 settings 后等「设置源就绪」再 resolve——`setSource` 回填 getter 时唤醒一个就绪 Promise，resolve 前 `await Promise.race([就绪, 250ms 上限])`，且只在 `ctx.inject` 已受理时才等（服务缺失/注册失败的老宿主最多等满上限就继续走 patch 层，不会挂起）。真机上回调一个微任务内就跑完，无实际延迟。
+- **注意**：user 层以前是"死配置"，升级后**此前写下却未生效的 user 层配置会一次性生效**（例如 `dream.enabled: false` 会真的关掉 dream）。建议升级前先核对一遍 `settings.yaml` 的 `meow-memory` 段。
+
+### 英文报错文案乱码修复
+
+- `src/prompts/en/labels.md` 里 9 处破折号被 GBK 误转烘进文件（`鈥?`），**≤ v0.26.0 的发布包都带着**，英文用户看到的报错是 `content is required 鈥?add ...`；已换回 `—` 并补回缺失的空格。
+
+### 其他
+
+- **全局口径统一**：`project` 为 `null` / 空串 / 「全局」/ `global` 一律算「全局适用」——修掉「按文档写『全局』的准则反而永不注入」（首轮 rules 注入与关键词命中链路都改用它）。判定锚定显式字面值，不绑当前语言包的缺省写法。
+- **项目改名 `femwa` → `femo`**：`migrate` 的项目匹配词仍认 `femwa` / `femGen` 老写法，输出统一为 `femo`。
+- 仓库内新增 `verify-client.mjs`（开发用：校验 `lib/client.js` 只有一处 `ModuleLoader.load`、能正常 materialize、重复执行仍被 duplicate 检测拦下）。
+
+### 测试
+
+- 主套件 **423**（新增 #24 的 8 条、#19 的 3 条、#21 的 3 条回归断言，均验证过**在修复前会失败**：#24 旧代码直接抛 issue 原文那句错、#19 旧代码同 turn 排了 3 条、#21 旧代码 user 层 `enabled: false` 被无视照常注册 7 个工具）。`test.mjs` 新增 `makeSettingsCtx`，补齐「异步 inject + settings」的真形状（旧 mock 没有 inject/settings，异常被 try/catch 吞掉，这正是 #21 长期没被测到的原因）。
 
 ## v0.26.0 (2026-09-10)
 

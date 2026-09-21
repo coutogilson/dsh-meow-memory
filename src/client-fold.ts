@@ -200,11 +200,18 @@ export function memoryTurnNumbers(snapshot: ConversationSnapshot): ReadonlySet<n
   return out
 }
 
-/** 横条文案（产品 copy，经 i18n 层：跟随 DSH 语言设置 zh/en/pt-br）。 */
+/** 横条文案（产品 copy，经 i18n 层：跟随 DSH 语言设置 zh/en/pt-br）。
+ *  dream 运行期带「插话会拼进本轮」提示（issue #20，用户拍板 2026-09-20）：dream 轮
+ *  运行中用户插话会被宿主 steering（next-step）拼进本轮、由同一回复一起消化；横条上
+ *  明说，避免"问题被吞了"的困惑。反思轮不提示——反思通常在长任务收尾排队，插话拼
+ *  进去的困惑远低于 dream（整轮都在做记忆整理）。 */
 export function foldLabel(group: FoldGroup, expanded: boolean): string {
   const arrow = expanded ? '▾' : '▸'
   const title = t(group.variant === 'dream' ? 'fold.title.dream' : 'fold.title.reflect')
-  if (group.status === 'running') return `${arrow} ${t('fold.status.running', { title })}`
+  if (group.status === 'running') {
+    const hint = group.variant === 'dream' ? t('fold.hint.running') : ''
+    return `${arrow} ${t('fold.status.running', { title })}${hint}`
+  }
   if (group.status === 'interrupted') return `${arrow} ${t('fold.status.interrupted', { title })}`
   if (group.rememberCount > 0) return `${arrow} ${t('fold.status.remembered', { title, n: group.rememberCount })}`
   if (group.updateCount > 0) return `${arrow} ${t('fold.status.updated', { title, n: group.updateCount })}`

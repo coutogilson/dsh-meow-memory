@@ -4,7 +4,7 @@
  * 写规则（进 description 给模型看）：
  * - fact/lesson 一句话直陈 ≤60 字（短是关键词命中注入的前提）；
  * - 用户介绍项目设计思路/框架/决策理由的原话必须保留措辞，不转述（project/lesson）；
- * - project 必填项目名（femwa / meow-memory / meow-eyes / dsh …）；
+ * - project 必填项目名（femo / meow-memory / meow-eyes / dsh …）；
  * - topic 必填标题（对象+动作，禁宽泛名）+ 建议目标句。
  */
 
@@ -20,6 +20,81 @@ const L = (key: string, params?: Record<string, string>): string => fillTemplate
 import { buildProjectSectionText, markProjectQueried, markWritten, readSeen, markAccessed, markSearched, setCurrentProject } from './inject.js'
 
 export type { Level }
+
+// ── 参数通道兜底（issue #24）────────────────────────────────────────────────
+// 部分宿主/模型走 XML 参数通道时，schema 声明为 array/number/boolean 的值会以
+// **字符串**形态到达 execute（用户实测：keywords 变成 '["代码审计","静态扫描"]'
+// 这类 JSON 文本，50 余次调用只有 1 次成功）。旧实现只认 Array.isArray，其余一律
+// 判「必填」清空 → memory_remember 在该类宿主上完全不可用，逼得用户绕过插件直接写
+// sqlite。这里统一做「能救就救」的归一：形态不对但语义可解析就照收，绝不因为通道
+// 差异丢参数；只有真的解析不出才报错。
+
+/** 参数形态描述（报错文案用，帮用户/模型定位通道问题）。 */
+function describeArg(value: unknown): string {
+  if (typeof value === 'string') return `string("${value.slice(0, 40)}")`
+  if (Array.isArray(value)) return `array(${value.length})`
+  if (value === null) return 'null'
+  return typeof value
+}
+
+/**
+ * 关键词归一：数组 / JSON 数组文本 / 「a, b」分隔文本 → string[]（去空白、丢空串、保持顺序）。
+ * 递归处理「数组里套 JSON 文本」的形态（如 ['["a","b"]']）。
+ */
+export function normalizeKeywords(raw: unknown): string[] {
+  const out: string[] = []
+  const push = (v: string): void => {
+    const t = v.trim()
+    if (t.length > 0) out.push(t)
+  }
+  const walk = (v: unknown): void => {
+    if (Array.isArray(v)) {
+      for (const item of v) walk(item)
+      return
+    }
+    if (typeof v !== 'string') return
+    const text = v.trim()
+    if (text.length === 0) return
+    if (text.startsWith('[')) {
+      try {
+        const parsed: unknown = JSON.parse(text)
+        if (Array.isArray(parsed)) {
+          walk(parsed)
+          return
+        }
+      } catch { /* 非法 JSON（如 '[a, b]'）：剥掉方括号按分隔文本处理 */ }
+      walk(text.replace(/^\[+|\]+$/g, ''))
+      return
+    }
+    if (/[,，、;；\n]/.test(text)) {
+      for (const part of text.split(/[,，、;；\n]+/)) push(part)
+      return
+    }
+    push(text)
+  }
+  walk(raw)
+  return out
+}
+
+/** 数值归一：number 原样（非有限值视为未提供）；纯数字字符串（'2' / '2.0'）→ number；其余 undefined。 */
+export function coerceNumber(raw: unknown): number | undefined {
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : undefined
+  if (typeof raw === 'string') {
+    const t = raw.trim()
+    if (t.length === 0) return undefined
+    const n = Number(t)
+    return Number.isFinite(n) ? n : undefined
+  }
+  return undefined
+}
+
+/** 布尔归一：true / 'true' / '1' / 'yes' / 'y' / 1 → true；其余 false。 */
+export function coerceBoolean(raw: unknown): boolean {
+  if (raw === true) return true
+  if (typeof raw === 'number') return raw === 1
+  if (typeof raw === 'string') return ['true', '1', 'yes', 'y'].includes(raw.trim().toLowerCase())
+  return false
+}
 
 /** 检索范围过滤（查询参数）：只按 project/status/days 过滤。
  *  已见（injected+searched）与本 session 建立的记忆不再预排除——search 先全量排名，
@@ -141,21 +216,29 @@ function rememberTool(dir: string): ToolDefinition {
       if (content.length === 0) throw new Error(L('remember.error.content'))
       const project = typeof parsed.project === 'string' && parsed.project.trim() ? parsed.project.trim() : null
       if (project === null) throw new Error(L('remember.error.project', { global: globalProjectMarker() }))
-      const keywords = Array.isArray(parsed.keywords)
-        ? parsed.keywords.filter((k): k is string => typeof k === 'string').map((k) => k.trim()).filter((k) => k.length > 0)
-        : []
-      if (keywords.length === 0) throw new Error(L('remember.error.keywords'))
-      if (typeof parsed.importance !== 'number') throw new Error(L('remember.error.importance'))
+      const keywords = normalizeKeywords(parsed.keywords)
+      if (keywords.length === 0) {
+        // 区分「压根没传」与「传了但解析不出任何关键词」（issue #24）：旧实现两者都
+        // 报「必填」，用户明明带了 8-13 个关键词却被告知没填，排查方向被带偏。
+        const missing = parsed.keywords === undefined || parsed.keywords === null
+          || (typeof parsed.keywords === 'string' && parsed.keywords.trim() === '')
+          || (Array.isArray(parsed.keywords) && parsed.keywords.length === 0)
+        throw new Error(missing
+          ? L('remember.error.keywords')
+          : L('remember.error.keywordsEmpty', { received: describeArg(parsed.keywords) }))
+      }
+      const importanceRaw = coerceNumber(parsed.importance)
+      if (importanceRaw === undefined) throw new Error(L('remember.error.importance'))
       const level: Level = typeof parsed.level === 'string' && (LEVELS as readonly string[]).includes(parsed.level)
         ? (parsed.level as Level)
         : 'fact'
-      const importance = Math.round(parsed.importance)
+      const importance = Math.round(importanceRaw)
       const subcategory =
         level === 'project' && typeof parsed.subcategory === 'string' && (PROJECT_SUBCATEGORIES as readonly string[]).includes(parsed.subcategory)
           ? (parsed.subcategory as ProjectSubcategory)
           : null
       const goal = typeof parsed.goal === 'string' && parsed.goal.trim() ? parsed.goal.trim() : null
-      const corrected = parsed.corrected === true ? 1 : 0
+      const corrected = coerceBoolean(parsed.corrected) ? 1 : 0
 
       const workspace = workspaceOf(exec)
       if (!workspace) throw new Error('memory_remember: 无法确定工作区（会话无 cwd）')
@@ -182,7 +265,7 @@ function rememberTool(dir: string): ToolDefinition {
         if (subcategory && level === 'project') patch.subcategory = subcategory
         if (goal && level === 'topic') patch.goal = goal
         if (level === 'lesson' && corrected) patch.corrected = 1
-        if (Array.isArray(parsed.keywords)) patch.keywords = keywords // 显式关键词才覆盖合并目标
+        patch.keywords = keywords // 显式关键词才覆盖合并目标（能走到这里说明关键词非空）
         db.update(level, merged.id, patch)
         // 写痕迹（v0.23.0）：合并落库也记入 written——压缩重注入第三块回放本会话写过的记忆。
         markWritten(workspace, source_session ?? 'unknown', [merged.id], dir)
@@ -280,7 +363,7 @@ function searchTool(dir: string): ToolDefinition {
           // 检索元数据视图：归属 + id + 相对时间 + 关键词（无关键词回退原文开头）；原文内容不显示。
           const kw = (Array.isArray(h.keywords) ? h.keywords : []).filter((x): x is string => typeof x === 'string' && x.length > 0)
           const about = kw.length > 0 ? kw.join(', ') : `${String(h.content ?? '').slice(0, 40)}…`
-          // 归属显示：'全局'=真全局；null=未标记（可能是数据 bug）；多值 join '/'（如 dsh/femwa）。
+          // 归属显示：'全局'=真全局；null=未标记（可能是数据 bug）；多值 join '/'（如 dsh/femo）。
           const proj = `${projectLabel(h.project)} : ${String(h.level ?? '')}`
           const rel = relativeTime(h.updated_at ?? null)
           lines.push(`[${proj}] [${String(h.id ?? '')}] [${rel}] 关于：${about}`)
@@ -308,9 +391,12 @@ function searchTool(dir: string): ToolDefinition {
         ? parsed.status.split(',').map((s) => s.trim()).filter((s) => s.length > 0)
         : []
       const status = statusList.length > 0 ? statusList : null
-      const days = typeof parsed.days === 'number' && parsed.days > 0 ? parsed.days : null
-      const k = typeof parsed.k === 'number' ? Math.max(1, Math.min(50, Math.round(parsed.k))) : 10
-      const contentMax = typeof parsed.content_max === 'number' ? Math.max(0, Math.min(5000, Math.round(parsed.content_max))) : 300
+      const daysRaw = coerceNumber(parsed.days)
+      const days = daysRaw !== undefined && daysRaw > 0 ? daysRaw : null
+      const kRaw = coerceNumber(parsed.k)
+      const k = kRaw !== undefined ? Math.max(1, Math.min(50, Math.round(kRaw))) : 10
+      const cmRaw = coerceNumber(parsed.content_max)
+      const contentMax = cmRaw !== undefined ? Math.max(0, Math.min(5000, Math.round(cmRaw))) : 300
 
       const levels: Level[] = typeof parsed.level === 'string' && parsed.level.trim()
         ? parsed.level.split(',').map((s) => s.trim()).filter((s): s is Level => (LEVELS as readonly string[]).includes(s))
@@ -431,8 +517,10 @@ function findSimilarTool(dir: string): ToolDefinition {
       if (!found) throw new Error(`memory_find_similar: 未找到记忆 ${id.slice(0, 12)}`)
       const sessionId = sessionIdOf(exec)
       const seen = readSeen(workspace, sessionId ?? 'unknown', dir)
-      const k = typeof parsed.k === 'number' ? Math.max(1, Math.min(20, Math.round(parsed.k))) : 5
-      const contentMax = typeof parsed.content_max === 'number' ? Math.max(0, Math.min(5000, Math.round(parsed.content_max))) : 200
+      const kRaw = coerceNumber(parsed.k)
+      const k = kRaw !== undefined ? Math.max(1, Math.min(20, Math.round(kRaw))) : 5
+      const cmRaw = coerceNumber(parsed.content_max)
+      const contentMax = cmRaw !== undefined ? Math.max(0, Math.min(5000, Math.round(cmRaw))) : 200
 
       const rows = LEVELS.flatMap((lv) => (lv === 'soul' || lv === 'user' ? [] : db.listSearchable(lv)))
       const candidates = rows.filter((r) => r.id !== found.row.id && !seen.has(r.id) && r.source_session !== sessionId)
@@ -591,7 +679,8 @@ function updateTool(dir: string): ToolDefinition {
       const patch: MemoryPatch = {}
       if (typeof parsed.content === 'string' && parsed.content.trim()) patch.content = parsed.content.trim()
       if (typeof parsed.status === 'string' && ['active', 'archived', 'stale'].includes(parsed.status)) patch.status = parsed.status as MemoryPatch['status']
-      if (typeof parsed.importance === 'number') patch.importance = Math.round(parsed.importance)
+      const importanceRaw = coerceNumber(parsed.importance)
+      if (importanceRaw !== undefined) patch.importance = Math.round(importanceRaw)
       if (typeof parsed.goal === 'string' && parsed.goal.trim() && found.level === 'topic') patch.goal = parsed.goal.trim()
       if (typeof parsed.project === 'string' && (found.level === 'project' || found.level === 'fact' || found.level === 'lesson' || found.level === 'rules' || found.level === 'topic')) {
         const cleared = parsed.project.trim() === ''
@@ -599,9 +688,10 @@ function updateTool(dir: string): ToolDefinition {
         // 锚定当前 project（命中检索限定"全局+当前项目"）；"全局"、清空归属、多项目（逗号分隔）不锚定。
         if (!cleared && !isGlobalProject(String(patch.project)) && !String(patch.project).includes(',')) setCurrentProject(workspace, sessionId ?? 'unknown', patch.project, dir)
       }
-      if (Array.isArray(parsed.keywords)) {
-        // 空数组 = 不更新（用户拍板：防 AI 幻觉"不想改关键词"却传 [] 把关键词全清空）。
-        const kw = parsed.keywords.filter((k): k is string => typeof k === 'string').map((k) => k.trim()).filter((k) => k.length > 0)
+      {
+        // 空数组 / 未提供 = 不更新（用户拍板：防 AI 幻觉"不想改关键词"却传 [] 把关键词全清空）；
+        // 字符串形态经通道兜底归一后同样接受（issue #24）。
+        const kw = normalizeKeywords(parsed.keywords)
         if (kw.length > 0) patch.keywords = kw
       }
       // 记忆时间戳 = 最后更新时间：db.update 内部自动刷新 updated_at（任何 update 都刷新）。

@@ -25,6 +25,7 @@ export const en: Record<UiKey, string> = {
   'fold.title.reflect': 'Memory reflection',
   'fold.title.dream': 'Memory dream task',
   'fold.status.running': '{title} in progress…',
+  'fold.hint.running': ' (your message joins this turn)',
   'fold.status.interrupted': '{title} interrupted',
   'fold.status.remembered': '{title} · {n} memories added',
   'fold.status.updated': '{title} · {n} updated',

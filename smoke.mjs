@@ -22,7 +22,7 @@ const db = new MemoryDb(memoryDbPath(ws))
 const s1 = db.insert({ level: 'soul', content: '我是用户的长期协作伙伴，重事实轻客套。', importance: 3 })
 check('soul insert', s1.id.length === 36)
 const u1 = db.insert({ level: 'user', content: '用户偏好中文交流，先备份再改代码。' })
-const p1 = db.insert({ level: 'project', content: 'femGen 集成 dsh 插件的设计定稿', project: 'femwa', title: 'femGen 集成' })
+const p1 = db.insert({ level: 'project', content: 'femGen 集成 dsh 插件的设计定稿', project: 'femo', title: 'femGen 集成' })
 const f1 = db.insert({ level: 'fact', content: 'Node v22 自带 node:sqlite 可用', project: 'dsh' })
 const l1 = db.insert({ level: 'lesson', content: '每轮注入没意义，模型能看见上下文', corrected: 1 })
 const t1 = db.insert({ level: 'topic', content: '【起因】重构记忆插件【经过】设计讨论【结果】未定', title: 'meow-memory 重构', goal: '让记忆插件 v2 上线' })
@@ -34,7 +34,7 @@ const found = db.findById(s1.id)
 check('findById cross-table', found?.level === 'soul' && found.row.content.includes('长期协作'))
 check('lesson corrected flag', db.list('lesson')[0].corrected === 1)
 check('topic goal stored', db.list('topic')[0].goal === '让记忆插件 v2 上线')
-check('project name stored', db.list('project')[0].project === 'femwa')
+check('project name stored', db.list('project')[0].project === 'femo')
 check('keywords auto empty then set', Array.isArray(db.list('fact')[0].keywords))
 
 const upd = db.update('topic', t1.id, { status: 'stale' })
@@ -53,7 +53,7 @@ const legacy = [
   '',
   '> 说明头',
   '',
-  '**用户 GitHub：Phant0Meow，就是 FemWA 作者本人（meow@example.com）**',
+  '**用户 GitHub：Phant0Meow，就是 femo 作者本人（meow@example.com）**',
   '作为长期协作伙伴，我应该重事实轻客套，先计划后动手。',
   '',
   '## 重要事实与决定 (fact)',
@@ -88,7 +88,7 @@ check('preference → user', users.some((u) => u.content.includes('先备份')))
 const lessons = db2.list('lesson')
 check('mistake → lesson corrected', lessons.length === 1 && lessons[0].corrected === 1)
 const projects = db2.list('project')
-check('user_said → project (femwa)', projects.some((p) => p.project === 'femwa' && p.content.includes('femGen')), JSON.stringify(projects.map((p) => [p.project, p.content.slice(0, 20)])))
+check('user_said → project (femo)', projects.some((p) => p.project === 'femo' && p.content.includes('femGen')), JSON.stringify(projects.map((p) => [p.project, p.content.slice(0, 20)])))
 check('detail → project (dsh)', projects.some((p) => p.project === 'dsh' && p.content.includes('subagents')))
 const facts = db2.list('fact')
 check('plain fact → fact', facts.length === 2 && facts.some((f) => f.content.includes('3081')), `facts=${facts.length}`)

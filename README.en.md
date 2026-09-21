@@ -226,7 +226,7 @@ Adding a community UI language: one dictionary file plus one line in `SUPPORTED_
 
 `promptLang` decides two things: ① the language of injected/reflection/dream prompts; ② the language of tool descriptions. It also shapes the language the model writes memory entries in — keywords are extracted in the entry's language, so **go with your chat language**.
 
-**Set it explicitly on first use**: `'zh'` (default) or `'en'` (built-in English language pack). If your chat language differs from your UI language, **go with your chat language**.
+**Set it explicitly on first use**: `'zh'` (default), `'en'` (built-in English pack) or `'pt-br'` (built-in Brazilian Portuguese pack). The value *is* the subdirectory name and is matched **verbatim**: a name that does not exist under `src/prompts/` (e.g. `pt`) raises nothing and silently falls back to the Chinese pack.
 
 On the retrieval side: the BM25 tokenizer is language-independent since v0.20.0 (category routing) — a language mismatch between queries and stored entries no longer degrades recall; `en` additionally enables English normalization (stopword filter + Porter stemmer), so inflected queries still hit stored entries (`tokenizers` matches `tokenizer`).
 
@@ -269,6 +269,7 @@ Thanks to every contributor who made meow-memory better:
 - **[daveycodez](https://github.com/daveycodez)** — English language pack & tokenizer ([PR #6](https://github.com/Phant0Meow/dsh-meow-memory/pull/6), shipped in v0.22.0)
 - **[chenmzh](https://github.com/chenmzh)** — isolated memory injections into independent plugin snapshot messages, fixing session title pollution ([PR #10](https://github.com/Phant0Meow/dsh-meow-memory/pull/10))
 - **[cuddly-guacamole](https://github.com/cuddly-guacamole)** — dual-version Session events compatibility for dsh 0.1.2-alpha.4 ([PR #11](https://github.com/Phant0Meow/dsh-meow-memory/pull/11))
+- **[coutogilson](https://github.com/coutogilson)** — Brazilian Portuguese prompt pack (`src/prompts/pt-br/`) and the UI copy layer that follows the DSH locale
 
 ## 📄 License
 

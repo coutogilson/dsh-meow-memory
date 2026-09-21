@@ -2,6 +2,12 @@
 
 ## v0.28.0 (unreleased)
 
+### 内置巴西葡语 prompt 语言包（src/prompts/pt-br/）
+
+- **新增 `src/prompts/pt-br/`**：9 个槽位（system-guide / reflect / dream-header / dream-atomic / dream-topic / dream-project-summary / welcome-guide / labels / tools）的巴西葡语翻译，`promptLang: 'pt-br'` 直接可用。贡献者母语为巴西葡语（不代签欧洲葡语，所以目录名用 `pt-br` 而非 `pt`）。
+- **`npm run check-lang -- pt-br` 绿**：与 `zh` 真源的键集（labels 47 键 / tools 43 键）、占位符集合、槽位清单逐项对齐；`project.global` 取 `global`（与 en 包一致——代码按该值匹配"全局适用"）。
+- **文档**：`src/prompts/README.md` 的目录结构补上 `en/` 与 `pt-br/`，并写明 `promptLang` **逐字匹配目录名**（`pt` 不会解析成 `pt-br`），名字不存在时静默落回 `zh` 包——这正是本地实例包踩过的坑。`README.md` / `README.en.md` / `README.pt-br.md` 的 `promptLang` 段同步补上 `pt-br` 与逐字匹配说明。
+
 ### 界面文案层：UI/UX 跟随 DSH 语言设置（zh / en / pt-br）
 
 - **问题**：界面文案（折叠横条、打点气泡、会话菜单项、设置页全部字段）硬编码中文，非中文用户看到的是中英混杂的界面——`promptLang` 只管模型文案，管不到 UI。

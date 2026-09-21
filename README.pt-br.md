@@ -201,8 +201,8 @@ depois de salvar, vale após recarregar a quente/reiniciar o plugin meow-memory.
   config:
     enabled: true          # chave geral
     projectDir: '.dsh-meow' # diretório de memória (relativo ao workspace)
-    promptLang: 'zh'       # ⚠️ configure explicitamente no primeiro uso (ver abaixo); use o nome do
-                           # diretório do seu pacote de prompts, ex.: 'en' ou 'pt-br'
+    promptLang: 'pt-br'    # ⚠️ configure explicitamente no primeiro uso (ver abaixo); o valor é o nome do
+                           # diretório do pacote: zh / en / pt-br
     hitTopK: 2             # máximo de entradas por acerto de palavra-chave a cada mensagem (fact/lesson/rules/topic)
     reflect: true          # reflexão automática após ≥reflectTurns rodadas seguidas de ferramenta
     reflectTurns: 7        # rodadas seguidas de ferramenta para disparar a reflexão
@@ -266,19 +266,18 @@ das ferramentas. Ele também influencia o idioma em que o modelo escreve as entr
 palavras-chave são extraídas no idioma da entrada, então **vale o idioma em que você fala**.
 
 **Por isso configure-o explicitamente no primeiro uso**: `promptLang: 'zh'` (padrão), `'en'` (pacote inglês
-embutido) ou o nome do diretório do seu pacote de prompts em português (o pacote `pt` desta instalação, por
-exemplo — `promptLang: 'pt'`). Se o seu idioma de conversa for diferente do idioma da interface (interface em
-inglês e conversa em português, por exemplo), **vale o idioma em que você fala**.
+embutido) ou `'pt-br'` (pacote português do Brasil embutido). O valor **é** o nome do subdiretório e é casado
+**literalmente**: um nome que não existe em `src/prompts/` (por exemplo `pt`) não gera erro nenhum — ele cai
+no pacote chinês, em silêncio.
 
 Sobre a busca: a tokenização do BM25 é independente de idioma desde a v0.20.0 (roteamento por categoria), e
 a diferença de idioma entre entradas e consulta não "mata a busca"; o modo `en` habilita ainda uma
 normalização do inglês (filtro de stopwords + stemmer de Porter), e flexões não atrapalham o acerto
 (`tokenizers` acerta uma entrada guardada como `tokenizer`).
 
-Como o português ainda não tem pacote de prompts embutido no repositório, use o pacote da comunidade/instância:
-coloque os arquivos de slot de mesmo nome em `<home>/.dsh-meow/prompts/<lang>/` (pode sobrescrever só alguns
-slots) — por exemplo `~/.dsh-meow/prompts/pt/` com `system-guide.md`, `labels.md`, `tools.md`, etc., e
-configure `promptLang: 'pt'`. Pacotes de prompt são arquivos de dados (`src/prompts/`), um diretório por
+O `pt-br` já vem embutido (tradução brasileira). Para outra variante de português ou para ajustar o texto, use
+o override de instância em `<home>/.dsh-meow/prompts/<lang>/` (pode sobrescrever só alguns slots) e configure o
+`promptLang` com esse mesmo nome. Pacotes de prompt são arquivos de dados (`src/prompts/`), um diretório por
 idioma, e passam a valer só editando os arquivos, sem mexer no código — veja
 [`src/prompts/README.md`](src/prompts/README.md) (com guia de contribuição e a autoverificação
 `npm run check-lang`).
@@ -328,6 +327,7 @@ Obrigado a cada contribuidor que faz o meow-memory melhorar:
 - **[daveycodez](https://github.com/daveycodez)** — pacote de prompts em inglês e tokenização do inglês ([PR #6](https://github.com/Phant0Meow/dsh-meow-memory/pull/6), lançado na v0.22.0)
 - **[chenmzh](https://github.com/chenmzh)** — injeção de memória como mensagem plugin snapshot independente, resolvendo a poluição do título da sessão ([PR #10](https://github.com/Phant0Meow/dsh-meow-memory/pull/10))
 - **[cuddly-guacamole](https://github.com/cuddly-guacamole)** — compatibilidade de Session events entre as duas versões do dsh 0.1.2-alpha.4 ([PR #11](https://github.com/Phant0Meow/dsh-meow-memory/pull/11))
+- **[coutogilson](https://github.com/coutogilson)** — pacote de prompts em português do Brasil (`src/prompts/pt-br/`) e a camada de texto de UI que segue o locale do DSH
 
 ## 📄 License
 

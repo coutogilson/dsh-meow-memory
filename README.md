@@ -201,7 +201,7 @@ prompt 仍按 `promptLang` 走（`promptLang` 只选 `src/prompts/` 里的模型
 
 `promptLang` 决定两件事：①注入/反思/dream 文案的语言；②工具描述的语言。它同时影响模型写记忆条目用的语言——关键词按条目语言提取，**以你说话的语言为准**。
 
-**因此首次使用时请显式配置它**：`promptLang: 'zh'`（默认）或 `'en'`（内置英文语言包）。如果你的对话语言和界面语言不一致（比如界面英文、说话中文），**以你说话的语言为准**。
+**因此首次使用时请显式配置它**：`promptLang: 'zh'`（默认）、`'en'`（内置英文语言包）或 `'pt-br'`（内置巴西葡语语言包）。配置值就是子目录名，**逐字匹配**：填一个 `src/prompts/` 里不存在的名字（例如 `pt`）不会报错，而是静默落回中文包。
 
 检索侧说明：BM25 分词自 v0.20.0 起语言无关（类别路由），条目与查询语言不一致不再"杀检索"；`en` 模式额外启用英语归一化（停用词过滤 + Porter 词干还原），屈折变化不影响命中（`tokenizers` 能命中存为 `tokenizer` 的条目）。
 
@@ -244,6 +244,7 @@ npm run test           # 228 项逻辑测试：db / bm25 / migrate / inject / re
 - **[daveycodez](https://github.com/daveycodez)** — 英文语言包与英文分词（[PR #6](https://github.com/Phant0Meow/dsh-meow-memory/pull/6)，v0.22.0 发布）
 - **[chenmzh](https://github.com/chenmzh)** — 记忆注入改为独立 plugin snapshot 消息，根治会话标题污染（[PR #10](https://github.com/Phant0Meow/dsh-meow-memory/pull/10)）
 - **[cuddly-guacamole](https://github.com/cuddly-guacamole)** — dsh 0.1.2-alpha.4 双版本 Session events 兼容（[PR #11](https://github.com/Phant0Meow/dsh-meow-memory/pull/11)）
+- **[coutogilson](https://github.com/coutogilson)** — 巴西葡语 prompt 语言包（`src/prompts/pt-br/`）与跟随 DSH 语言设置的界面文案层
 
 ## 📄 License
 

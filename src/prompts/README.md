@@ -9,10 +9,14 @@ Prompt texts are **data files, not code**: one directory per language, read at r
 ```
 src/prompts/
   zh/    ← key-set source of truth（真源）
-  <lang>/ ← e.g. en（your translation）
+  en/    ← shipped translation（ship 的翻译）
+  pt-br/ ← shipped translation（ship 的翻译）
+  <lang>/ ← your translation（你的翻译）
 ```
 
 `build.mjs` copies `src/prompts/` → `lib/prompts/`; the loader reads `lib/prompts/` at runtime.
+
+**O `promptLang` casa o nome da pasta literalmente** (sem normalização de variante): `pt` não resolve para `pt-br`. Um valor sem pasta correspondente nem no override de instância nem no pacote embutido cai no `zh` **em silêncio** — se os prompts aparecerem em chinês, é isso.
 
 ## Slots / 槽位（8 个）
 

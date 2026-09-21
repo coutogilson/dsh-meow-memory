@@ -250,6 +250,10 @@ console.log('=== 6. foldLabel 文案 ===')
   check('已更新 2 条', foldLabel({ ...base, updateCount: 2 }, false) === '▸ 记忆反思 · 已更新 2 条')
   check('dream 新增', foldLabel({ ...base, variant: 'dream', rememberCount: 1 }, true) === '▾ 记忆梦境任务 · 新增记忆 1 条')
   check('中断', foldLabel({ ...base, status: 'interrupted' }, false) === '▸ 记忆反思已中断')
+  // issue #20（用户拍板 2026-09-20）：dream 运行中横条要提示"插话会拼进本轮"；
+  // 反思运行中不带提示。
+  check('dream running 提示插话', foldLabel({ ...base, variant: 'dream', status: 'running' }, false) === '▸ 记忆梦境任务进行中…（插话会拼进本轮）')
+  check('reflect running 无提示', foldLabel({ ...base, status: 'running' }, false) === '▸ 记忆反思进行中…')
 }
 
 // ---- 7. 并行 tool-call 各自成节点（反思轮真实形态） ----

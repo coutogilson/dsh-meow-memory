@@ -198,7 +198,14 @@ export function memoryTurnNumbers(snapshot: ConversationSnapshot): ReadonlySet<n
 /** 横条文案（产品 copy，中文）。 */
 export function foldLabel(group: FoldGroup, expanded: boolean): string {  const arrow = expanded ? '▾' : '▸'
   const title = group.variant === 'dream' ? '记忆梦境任务' : '记忆反思'
-  if (group.status === 'running') return `${arrow} ${title}进行中…`
+  // dream 运行期提示（issue #20 插件侧缓解，用户拍板 2026-09-20）：dream 轮运行中
+  // 用户插话会被宿主 steering（next-step）拼进本轮、由同一回复一起消化——横条上
+  // 明说，避免"问题被吞了"的困惑。反思轮不提示：反思通常在长任务收尾排队，
+  // 插话拼进去的困惑远低于 dream（整轮都在做记忆整理）。
+  if (group.status === 'running') {
+    const suffix = group.variant === 'dream' ? '（插话会拼进本轮）' : ''
+    return `${arrow} ${title}进行中…${suffix}`
+  }
   if (group.status === 'interrupted') return `${arrow} ${title}已中断`
   if (group.rememberCount > 0) return `${arrow} ${title} · 新增记忆 ${group.rememberCount} 条`
   if (group.updateCount > 0) return `${arrow} ${title} · 已更新 ${group.updateCount} 条`

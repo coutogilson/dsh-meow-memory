@@ -7,9 +7,10 @@
 - **问题**：界面文案（折叠横条、打点气泡、会话菜单项、设置页全部字段）硬编码中文，非中文用户看到的是中英混杂的界面——`promptLang` 只管模型文案，管不到 UI。
 - **分层**：界面文案与模型文案分家。新增 `src/i18n/`（UI 层，跟随 DSH 语言设置）与既有 `src/prompts/<lang>/`（模型层，跟随 `promptLang`）互不影响：界面可以跟随外壳切成英文/葡语，注入给模型的 prompt 仍按 `promptLang` 走。
 - **跟随 DSH**：`installI18n(ctx)` 经 `ctx.get('locale')` 探测 DSH 0.1.5+ 的 locale 服务（**不写进 `inject`**——写进去会让插件在无 locale 的老宿主/受限动态包上整体挂起），注册 `addLanguage({ id: 'pt-br', label: 'Português (Brasil)', fallback: 'en' })` 与三语字典；查表走服务自己的 fallback 链（pt-br 缺键自动落 en，绝不出现空串）。设置页标签按官方契约在语言切换时重新注册；纯 DOM 节点（横条/气泡/菜单项）经 `registerUiReplayer` 重放注册表刷新；设置页经 `onUiLocaleChange` 重渲染。
-- **降级**：无 locale 服务（老宿主 / 动态包）→ `navigator.languages` 判定 + 内置静态查表（zh → en），最终落 `zh`——与外置前逐字不变。语言/字典注册任何一步失败只告警，UI 退化不改插件行为。
+- **降级**：无 locale 服务（老宿主 / 动态包）→ `navigator.languages` 判定 + 内置静态查表（zh → en），最终落 `zh`——浏览器为中文的中文用户界面不变，浏览器要英文的用户现在拿到英文（这正是本次改动的目的）。语言/字典注册任何一步失败只告警，UI 退化不改插件行为。
 - **新增语言**：加一个字典文件 + `SUPPORTED_UI_LOCALES` 一行即可（`Record<UiKey, string>` 类型与测试卡住缺键/多余键），不改 UI 代码。文档见 `src/i18n/README.md`。
 - 文案键集 `zh` 侧逐字保留外置前的中文，中文用户视角是纯重构。
+- **设置页提示 ≠ 模型语言包**（review 修正）：`promptLang` 只选 `src/prompts/` 的模型文案包（当前内置 `zh` / `en`），界面语言由 DSH 的语言设置决定。提示里不再宣称内置 `pt-br` 语言包（`pt-br` 只是 UI 语言 id），并明说界面语言与它无关——避免用户照提示设 `promptLang: pt-br` 后静默落回中文包。测试补了对应回归断言。
 
 ### 文档
 

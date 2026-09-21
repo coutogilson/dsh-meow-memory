@@ -96,8 +96,8 @@ export const ptBr: Record<UiKey, string> = {
   'settings.field.dream.rulesReviewDays.hint': 'Regras estáveis com updated_at mais antigo que esses dias ficam fora da 1ª rodada do dream; 0 = sem filtro',
   'settings.field.promptLang.label': 'Idioma dos prompts e da busca',
   'settings.field.promptLang.hint':
-    "Vazio = zh por padrão (sessões que nunca configuraram recebem um guia de primeira vez); 'en' = pacote inglês embutido, 'pt-br' = pacote português do Brasil embutido. O idioma precisa ser o mesmo em que você fala, senão a taxa de acerto das palavras-chave cai",
-  'settings.field.promptLang.placeholder': 'zh / en / pt-br',
+    "Vazio = zh por padrão (sessões que nunca configuraram recebem um guia de primeira vez); 'en' = pacote inglês embutido. O idioma da interface não tem relação — ele segue a configuração de idioma do DSH. O idioma precisa ser o mesmo em que você fala, senão a taxa de acerto das palavras-chave cai",
+  'settings.field.promptLang.placeholder': 'zh / en',
 
   // ── data e hora ───────────────────────────────────────────────────────────
   'datetime.ymd': '{d}/{m}',

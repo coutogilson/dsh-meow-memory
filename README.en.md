@@ -218,7 +218,7 @@ To run memory work on a different (cheaper) model: with `delegate.model` set, ev
 
 The plugin's own UI copy (fold bars, delegate bubbles, session menu item, settings page) goes through a separate **UI copy layer** that follows DSH's Settings → General → Language: **中文 / English / Português (Brasil)** ship built in, and a switch applies immediately (the settings label re-registers per the official contract; plain DOM nodes are refreshed through a replay registry).
 
-It is a different layer from `promptLang` (model-facing copy) and the two do not interfere: the UI can follow the shell while injected prompts keep following `promptLang`. On old hosts (no locale service) it degrades to the browser language plus the built-in dictionaries, ending at `zh` — byte-for-byte the previous behaviour.
+It is a different layer from `promptLang` (model-facing copy) and the two do not interfere: the UI can follow the shell while injected prompts keep following `promptLang`. On old hosts (no locale service) it degrades to the browser language plus the built-in dictionaries, ending at `zh` — unchanged for a Chinese-reading user on a Chinese browser, and now pulling English (the point of the change) for one whose browser asks for it.
 
 Adding a community UI language: one dictionary file plus one line in `SUPPORTED_UI_LOCALES` (no UI code changes). See [`src/i18n/README.md`](src/i18n/README.md).
 

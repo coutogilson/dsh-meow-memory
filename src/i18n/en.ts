@@ -105,8 +105,8 @@ export const en: Record<UiKey, string> = {
   'settings.field.dream.rulesReviewDays.hint': 'Stable rules whose updated_at is older than this many days skip dream round 1; 0 = no filter',
   'settings.field.promptLang.label': 'Prompt and retrieval language',
   'settings.field.promptLang.hint':
-    "Empty = zh by default (sessions that never configured it get a one-time first-run guide); 'en' = built-in English pack, 'pt-br' = built-in Brazilian Portuguese pack. The language must match the one you speak, or keyword hit rates drop",
-  'settings.field.promptLang.placeholder': 'zh / en / pt-br',
+    "Empty = zh by default (sessions that never configured it get a one-time first-run guide); 'en' = built-in English pack. The UI language is unrelated — that follows the DSH language setting. The language must match the one you speak, or keyword hit rates drop",
+  'settings.field.promptLang.placeholder': 'zh / en',
 
   // ── date and time ─────────────────────────────────────────────────────────
   'datetime.ymd': '{m}/{d}',

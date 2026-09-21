@@ -250,9 +250,11 @@ vale na hora (o rótulo da página de configurações se re-registra conforme o 
 puro são atualizados pelo registro de replay).
 
 É uma camada separada do `promptLang` (texto do modelo) e as duas não interferem: a interface pode seguir o
-idioma do shell enquanto os prompts injetados continuam seguindo o `promptLang`. Em hosts antigos (sem o
-serviço de locale) ele cai para o idioma do navegador + os dicionários embutidos, terminando em `zh` —
-comportamento idêntico ao de antes da extração.
+idioma do shell enquanto os prompts injetados continuam seguindo o `promptLang` (o `promptLang` só escolhe o
+pacote de textos de modelo em `src/prompts/`, hoje `zh` / `en`). Em hosts antigos (sem o serviço de locale)
+ele cai para o idioma do navegador + os dicionários embutidos, terminando em `zh` — inalterado para quem lê
+chinês com o navegador em chinês, e já puxando o inglês (que é o objetivo da mudança) para quem pede esse
+idioma.
 
 Para criar/contribuir com um idioma de interface: um arquivo de dicionário + uma linha em
 `SUPPORTED_UI_LOCALES` (sem mexer no código da UI). Detalhes em [`src/i18n/README.md`](src/i18n/README.md).

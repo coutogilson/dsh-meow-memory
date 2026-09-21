@@ -94,8 +94,8 @@ export const zh: Record<UiKey, string> = {
   'settings.field.dream.rulesReviewDays.hint': 'updated_at 距今超该天数的稳定准则不进 dream 第 1 轮；0=不过滤',
   'settings.field.promptLang.label': 'prompt 与检索语言',
   'settings.field.promptLang.hint':
-    "留空=默认 zh（未配置过的会话会收到一次首用引导）；'en'=内置英文语言包，'pt-br'=内置巴西葡语语言包。语言必须与你说的话一致，否则关键词命中率下降",
-  'settings.field.promptLang.placeholder': 'zh / en / pt-br',
+    "留空=默认 zh（未配置过的会话会收到一次首用引导）；'en'=内置英文语言包。界面语言与它无关——那由 DSH 的语言设置决定。语言必须与你说的话一致，否则关键词命中率下降",
+  'settings.field.promptLang.placeholder': 'zh / en',
 
   // ── 日期时间 ──────────────────────────────────────────────────────────────
   'datetime.ymd': '{m}月{d}日',

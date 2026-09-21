@@ -152,7 +152,10 @@ check('zh 字段标签', page.includes('总开关') && page.includes('prompt 与
 check('zh 徽章', page.includes('已覆盖') && page.includes('默认'))
 check('zh 恢复默认按钮', page.includes('恢复默认'))
 check('zh 占位符（字面量原样）', page.includes('.dsh-meow'))
-check('zh 占位符（i18n 键翻译）', page.includes('zh / en / pt-br'))
+check('zh 占位符（i18n 键翻译）', page.includes('zh / en'))
+// 回归防线：promptLang 只选模型文案包，设置页不得宣称内置 pt-br（src/prompts/ 只有 zh + en）。
+check('zh 不宣称内置 pt-br 提示包', !page.some((s) => s.includes('内置巴西葡语')))
+check('zh 说明界面语言由 DSH 决定', page.some((s) => s.includes('界面语言与它无关')))
 
 settings.setUiLocaleForTest('en')
 page = texts(renderPage())
@@ -161,7 +164,8 @@ check('en 分组标题', page.includes('Basics') && page.includes('Idle consolid
 check('en 字段标签', page.includes('Master switch') && page.includes('Prompt and retrieval language'))
 check('en 徽章', page.includes('Overridden') && page.includes('Default'))
 check('en 恢复默认按钮', page.includes('Restore default'))
-check('en 提示含 pt-br', page.some((s) => s.includes('built-in Brazilian Portuguese pack')))
+check('en 提示不宣称内置 pt-br', !page.some((s) => s.includes('built-in Brazilian Portuguese pack')))
+check('en 说明界面语言由 DSH 决定', page.some((s) => s.includes('UI language is unrelated')))
 
 settings.setUiLocaleForTest('pt-br')
 page = texts(renderPage())
@@ -171,7 +175,8 @@ check('pt-br 字段标签', page.includes('Chave geral') && page.includes('Idiom
 check('pt-br 徽章', page.includes('Alterado') && page.includes('Padrão'))
 check('pt-br 恢复默认按钮', page.includes('Restaurar padrão'))
 check('pt-br 占位符', page.includes('ex.: zai-coding-cn/glm-5.3-flash'))
-check('pt-br 提示含 pt-br', page.some((s) => s.includes('pacote português do Brasil embutido')))
+check('pt-br 提示不宣称内置 pt-br', !page.some((s) => s.includes('pacote português do Brasil embutido')))
+check('pt-br 说明界面语言由 DSH 决定', page.some((s) => s.includes('idioma da interface não tem relação')))
 
 // ── 3. 峰时解析错误文案本地化 ───────────────────────────────────────────────
 console.log('=== 3. 峰时解析错误文案 ===')

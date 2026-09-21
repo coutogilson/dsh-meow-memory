@@ -190,8 +190,9 @@ DSH 的「设置 → 通用 → 语言」：内置 **中文 / English / Portugu�
 切换即时生效（设置页标签按官方契约重新注册，纯 DOM 节点经重放注册表刷新）。
 
 它与 `promptLang`（模型文案）是两层，互不影响：界面可以跟随外壳语言，而注入给模型的
-prompt 仍按 `promptLang` 走。老宿主（无 locale 服务）自动降级为浏览器语言 + 内置字典，
-最终落 `zh`——行为与外置前逐字不变。
+prompt 仍按 `promptLang` 走（`promptLang` 只选 `src/prompts/` 里的模型文案包，目前内置
+`zh` / `en`）。老宿主（无 locale 服务）自动降级为浏览器语言 + 内置字典，最终落 `zh`
+——中文用户浏览器也是中文时界面不变，浏览器要英文的用户则拿到英文（这正是本次改动的目的）。
 
 自定义 / 社区界面语言：加一个字典文件 + 在 `SUPPORTED_UI_LOCALES` 加一行（不改 UI 代码），
 详见 [`src/i18n/README.md`](src/i18n/README.md)。

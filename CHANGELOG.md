@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.28.0 (unreleased)
+## v0.28.0 (unreleased - release candidate)
 
 ### 内置巴西葡语 prompt 语言包（src/prompts/pt-br/）
 
